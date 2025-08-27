@@ -40,9 +40,9 @@ jobs:
     - name: Create .env file for tests
       run: |
         echo "# Test environment variables" > .env
-        echo "STATSHUNTERS_API_KEY=test_key" >> .env
-        echo "ORS_API_KEY=test_ors_key" >> .env
-        echo "MAPY_API_KEY=test_mapy_key" >> .env
+        echo "STATSHUNTERS_API_KEY=${{ secrets.STATSHUNTERS_API_KEY || 'test_key' }}" >> .env
+        echo "ORS_API_KEY=${{ secrets.ORS_API_KEY || 'test_ors_key' }}" >> .env
+        echo "MAPY_API_KEY=${{ secrets.MAPY_API_KEY || 'test_mapy_key' }}" >> .env
         echo "HOST=0.0.0.0" >> .env
         echo "PORT=8000" >> .env
     
@@ -110,9 +110,9 @@ jobs:
     
     - name: Create .env file
       run: |
-        echo "STATSHUNTERS_API_KEY=test_key" > .env
-        echo "ORS_API_KEY=test_key" >> .env
-        echo "MAPY_API_KEY=test_key" >> .env
+        echo "STATSHUNTERS_API_KEY=${{ secrets.STATSHUNTERS_API_KEY || 'test_key' }}" > .env
+        echo "ORS_API_KEY=${{ secrets.ORS_API_KEY || 'test_key' }}" >> .env
+        echo "MAPY_API_KEY=${{ secrets.MAPY_API_KEY || 'test_mapy_key' }}" >> .env
     
     - name: Start server
       run: |
