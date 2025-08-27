@@ -48,21 +48,9 @@
                     </div>
                 </div>
                 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="distance">Target Distance (km):</label>
-                        <input type="number" id="distance" min="1" max="200" value="50">
-                    </div>
-                    <div class="form-group">
-                        <label for="bike-type">Bike Type:</label>
-                        <select id="bike-type">
-                            <option value="road">🚴‍♂️ Road Bike</option>
-                            <option value="gravel" selected>🚵‍♀️ Gravel Bike</option>
-                            <option value="mountain">🏔️ Mountain Bike</option>
-                            <option value="ebike">⚡ E-Bike</option>
-                        </select>
-                        <small id="bike-type-description">Select a bike type to see routing preferences</small>
-                    </div>
+                <div class="form-group">
+                    <label for="distance">Target Distance (km):</label>
+                    <input type="number" id="distance" min="1" max="200" value="50">
                 </div>
 
                 <div class="form-row">
@@ -76,6 +64,27 @@
                             Prefer unvisited tiles
                         </label>
                     </div>
+                </div>
+            </div>
+
+            <!-- Routing Service Selection -->
+            <div class="section">
+                <h3>🛣️ Routing Service</h3>
+                <div class="form-group">
+                    <label for="routing-service">Routing Service:</label>
+                    <select id="routing-service">
+                        <option value="">Select routing service...</option>
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                    <small id="routing-service-description">Choose your preferred routing service</small>
+                </div>
+                <div class="form-group">
+                    <label for="bike-type">Bike Type:</label>
+                    <select id="bike-type">
+                        <option value="mountain" selected>🏔️ Mountain Bike</option>
+                        <!-- Options will be populated dynamically based on routing service -->
+                    </select>
+                    <small id="bike-type-description">Available options depend on selected routing service</small>
                 </div>
             </div>
 
@@ -107,13 +116,21 @@
                 </div>
             </div>
 
-            <!-- OpenRouteService Setup -->
+            <!-- API Keys Configuration -->
             <div class="section">
-                <h3>🛣️ Routing Service</h3>
+                <h3>🔐 API Keys</h3>
                 <div class="form-group">
                     <label for="ors-key">OpenRouteService API Key:</label>
                     <input type="text" id="ors-key" placeholder="Get from openrouteservice.org">
-                    <small>Required for route generation</small>
+                    <small>For global routing with multiple bike types</small>
+                </div>
+                <div class="form-group">
+                    <label for="mapy-key">Mapy.cz API Key:</label>
+                    <input type="text" id="mapy-key" placeholder="Get from developer.mapy.com">
+                    <small>For Central European routing, excellent for mountain biking</small>
+                </div>
+                <div class="form-group">
+                    <small>💡 You need at least one API key for route generation. Mapy.cz is recommended for mountain biking and touring.</small>
                 </div>
             </div>
 

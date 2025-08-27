@@ -1,15 +1,17 @@
 # 🚴 Statshunters Route Optimizer
 
-A web-based route planner that optimizes cycling routes to discover new Statshunters tiles efficiently. Plan routes for different bike types (road, gravel, mountain) while maximizing coverage of unvisited map tiles.
+A web-based route planner that optimizes cycling routes to discover new Statshunters tiles efficiently. Plan routes for different bike types using multiple routing services, while maximizing coverage of unvisited map tiles.
 
 ## Features
 
 - 🗺️ **Tile Visualization**: View visited (green) and unvisited (red) tiles on an interactive map
 - 🚴 **Multi-Bike Support**: Route planning for road, gravel, mountain, and e-bikes
+- 🛣️ **Multiple Routing Services**: OpenRouteService for global coverage, Mapy.cz for superior mountain biking
 - 🎯 **Optimization Algorithm**: Smart route generation to cover maximum unvisited tiles
 - 📊 **Route Analytics**: Distance, duration, elevation gain, and tile coverage stats
 - 📥 **GPX Export**: Download routes for GPS devices and cycling apps
 - 📍 **Location Services**: Use current location or click on map to set start point
+- 🎛️ **Service Selection**: Choose between OpenRouteService and Mapy.cz routing services
 
 ## Setup
 
@@ -17,7 +19,9 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
 
 - Python 3.7+
 - Statshunters account with share link or API key
-- OpenRouteService API key (free at [openrouteservice.org](https://openrouteservice.org/dev/#/signup))
+- At least one routing service API key:
+  - **OpenRouteService** (global coverage, free at [openrouteservice.org](https://openrouteservice.org/dev/#/signup))
+  - **Mapy.cz** (Central European routing, excellent for mountain biking, free at [developer.mapy.com](https://developer.mapy.com/))
 
 ### Installation
 
@@ -34,14 +38,14 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
    ```
    Edit `.env` file with your credentials:
    ```
-   # Option 1: Use Statshunters share link
+   # Statshunters credentials (required)
    STATSHUNTERS_SHARE_LINK=https://www.statshunters.com/share/YOUR_CODE
-   
-   # Option 2: Use share code only (the code part from your share link)
+   # OR
    STATSHUNTERS_API_KEY=abc123def
    
-   # Required: OpenRouteService API key
-   ORS_API_KEY=your_ors_api_key
+   # Routing services (at least one required)
+   ORS_API_KEY=your_openrouteservice_key      # Global routing
+   MAPY_API_KEY=your_mapy_cz_key              # Central European routing
    ```
 
 3. **Run the application:**
@@ -73,26 +77,44 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
 2. Create a new token
 3. Copy the API key
 
+### Mapy.cz API Key (Recommended for Mountain Biking)
+1. Create a Seznam account at [Mapy.cz Developer Portal](https://developer.mapy.com/)
+2. Log in to My Account portal
+3. Create an API Project
+4. Copy the automatically generated API key
+5. **Free tier**: 250,000 requests/month (much higher than OpenRouteService!)
+
 ## Usage
 
 ### Basic Route Planning
 
-1. **Configure Credentials**: Enter your Statshunters share link and ORS API key
-2. **Set Start Point**: Click on the map or use current location
-3. **Configure Route**: 
+1. **Configure Credentials**: Enter your Statshunters credentials and routing API keys
+2. **Select Routing Service**: Choose between OpenRouteService or Mapy.cz
+3. **Set Start Point**: Click on the map or use current location
+4. **Configure Route**: 
    - Set target distance (km)
-   - Choose bike type (road/gravel/mountain/e-bike)
+   - Choose bike type (available options depend on routing service)
    - Adjust max tiles and preferences
-4. **Load Tiles**: Click "Load Tiles" to fetch your tile data
-5. **Generate Route**: Click "Generate Route" to create optimized route
-6. **Export**: Download GPX file for your GPS device
+5. **Load Tiles**: Click "Load Tiles" to fetch your tile data
+6. **Generate Route**: Click "Generate Route" to create optimized route
+7. **Export**: Download GPX file for your GPS device
 
-### Bike Type Profiles
+### Bike Type Profiles & Routing Services
 
-- **🚴‍♂️ Road Bike**: Optimized for paved roads, faster speeds
-- **🚵‍♀️ Gravel Bike**: Balanced for mixed surfaces, moderate speeds
-- **🏔️ Mountain Bike**: Designed for off-road trails and rough terrain  
-- **⚡ E-Bike**: Electric bike optimized routing
+**OpenRouteService** (Global coverage):
+- **🚴‍♂️ Road Bike**: Fast paved routes, avoids highways
+- **🚵‍♀️ Gravel Bike**: Mixed surfaces, quiet scenic routes
+- **🏔️ Mountain Bike**: Off-road capable, allows varied terrain
+- **⚡ E-Bike**: Gentle gradients, electric motor assistance
+
+**Mapy.cz** (Central European specialist):
+- **🚴‍♂️ Road Bike**: Prefers asphalt and cycle paths
+- **🏔️ Mountain/Touring Bike**: Excellent for bike touring, prefers cycle paths regardless of surface
+
+**💡 Service Selection Tips:**
+- For mountain biking and touring → Mapy.cz (superior mountain bike routing)  
+- For road/gravel/e-bike routing → OpenRouteService (more bike type options)
+- For Central/Eastern Europe → Mapy.cz often has better local routing
 
 ### Advanced Features
 
@@ -103,22 +125,27 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
 
 ## API Endpoints
 
+- `GET /api/routing-services` - Get available routing services and bike types
 - `POST /api/tiles` - Fetch tile data for map bounds
-- `POST /api/route` - Generate optimized route
+- `POST /api/route` - Generate optimized route with service selection
 - `GET /api/download/{filename}` - Download GPX files
-- `GET /api/health` - Service health check
+- `GET /api/bike-profiles` - Get bike type profiles for selected service
 
 ## Technical Architecture
 
 ### Backend (Python/FastAPI)
 - **FastAPI**: Modern web framework for APIs
-- **Statshunters Client**: Fetches visited/unvisited tiles
-- **OpenRouteService Integration**: Cycling-specific routing
+- **Statshunters Client**: Fetches visited/unvisited tiles  
+- **Routing Services**: 
+  - OpenRouteService integration for global routing
+  - Mapy.cz integration for Central European routing
+  - Factory pattern for service selection and fallback
 - **Optimization Algorithm**: Modified TSP for tile coverage
 - **GPX Generation**: Export routes for GPS devices
 
 ### Frontend (HTML/CSS/JavaScript)
 - **Leaflet.js**: Interactive mapping
+- **Dynamic UI**: Routing service selector with bike type adaptation
 - **Responsive Design**: Works on all devices
 - **Local Storage**: Saves configuration between sessions
 
@@ -127,7 +154,8 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
 - `shapely`: Geometric operations
 - `networkx`: Graph algorithms for route optimization
 - `gpxpy`: GPX file generation
-- `openrouteservice`: Route calculation
+- `openrouteservice`: OpenRouteService API client
+- `requests`: HTTP client for Mapy.cz API
 
 ## Troubleshooting
 
@@ -142,7 +170,8 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
    - Move start point to area with more tiles
 
 3. **"Route generation failed"**
-   - Check OpenRouteService API key
+   - Check your routing API keys (OpenRouteService or Mapy.cz)
+   - Try different routing service if one fails
    - Ensure start point is on accessible roads
 
 4. **Tiles not loading**
@@ -153,7 +182,8 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
 
 - Start with smaller distances (20-50km) for testing
 - Limit max tiles (10-30) for faster processing
-- Use appropriate bike type for terrain
+- Use appropriate bike type and routing service for terrain
+- Mapy.cz has higher rate limits (250k vs 2k daily) for heavy usage
 
 ## Contributing
 
@@ -169,5 +199,6 @@ MIT License - see LICENSE file for details
 ## Acknowledgments
 
 - [Statshunters.com](https://www.statshunters.com) for the tile hunting platform
-- [OpenRouteService](https://openrouteservice.org) for cycling route calculation
+- [OpenRouteService](https://openrouteservice.org) for global cycling route calculation
+- [Mapy.cz](https://mapy.cz) and Seznam for Central European routing services
 - [OpenStreetMap](https://www.openstreetmap.org) contributors for map data
