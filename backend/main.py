@@ -93,7 +93,12 @@ class RouteResponse(BaseModel):
 @app.get("/")
 async def read_root():
     """Serve the main HTML page."""
-    return FileResponse("../frontend/index.html")
+    frontend_index = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html")
+    if os.path.exists(frontend_index):
+        return FileResponse(frontend_index)
+    else:
+        # For testing or when frontend is not available
+        return {"message": "Statshunters Route Optimizer API", "docs": "/docs"}
 
 @app.get("/favicon.ico")
 async def favicon():
@@ -424,7 +429,13 @@ async def health_check():
     }
 
 # Mount static files for CSS, JS, and other assets
-app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+# Mount static files only if frontend directory exists
+frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
+if os.path.exists(frontend_path):
+    app.mount("/static", StaticFiles(directory=frontend_path), name="static")
+else:
+    # For testing or when frontend is not available
+    logger.warning("Frontend directory not found, static files will not be served")
 
 if __name__ == "__main__":
     import uvicorn
