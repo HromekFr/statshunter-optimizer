@@ -22,10 +22,12 @@ class TestRoutingFactory(unittest.TestCase):
         """Set up test fixtures."""
         self.factory = RoutingServiceFactory()
     
+    @patch.dict(os.environ, {'MAPY_API_KEY': 'test', 'ORS_API_KEY': 'test'})
     def test_factory_initialization(self):
         """Test factory initializes correctly."""
-        self.assertIsNotNone(self.factory)
-        services = self.factory.get_available_services()
+        factory = RoutingServiceFactory()
+        self.assertIsNotNone(factory)
+        services = factory.get_available_services()
         self.assertIsInstance(services, dict)
     
     def test_service_detection(self):
