@@ -286,9 +286,20 @@ class MapyRouteService:
             
             # Extract route information from Mapy.cz response
             if 'geometry' in route_data:
+                # Extract the actual geometry from the GeoJSON Feature
+                geometry_data = route_data['geometry']
+                
+                # Check if it's a GeoJSON Feature with nested geometry
+                if isinstance(geometry_data, dict) and geometry_data.get('type') == 'Feature':
+                    # Extract the LineString geometry from the Feature
+                    actual_geometry = geometry_data.get('geometry', {})
+                else:
+                    # Use as-is if it's already a geometry object
+                    actual_geometry = geometry_data
+                
                 # Convert Mapy.cz response to standard format
                 result = {
-                    'geometry': route_data.get('geometry', {}),
+                    'geometry': actual_geometry,  # Use the extracted geometry
                     'distance': route_data.get('length', 0),  # meters
                     'duration': route_data.get('duration', 0),  # seconds
                     'ascent': route_data.get('ascent', 0),
