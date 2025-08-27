@@ -188,7 +188,7 @@ async def generate_route(request: RouteRequest):
                 waypoints=waypoints,
                 bike_type=request.bike_type,
                 optimize=True,
-                validate_waypoints=True
+                validate_waypoints=False  # Disabled to avoid rate limiting
             )
         except Exception as route_error:
             # Check for rate limiting first
@@ -214,7 +214,7 @@ async def generate_route(request: RouteRequest):
                         waypoints=simplified_waypoints,
                         bike_type=request.bike_type,
                         optimize=False,
-                        validate_waypoints=True
+                        validate_waypoints=False  # Disabled to avoid rate limiting
                     )
                     logger.info("Simplified route generated successfully")
                 except Exception as simple_error:
