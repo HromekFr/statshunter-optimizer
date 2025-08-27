@@ -51,14 +51,14 @@ class TestAPIEndpoints(unittest.TestCase):
     @patch('main.StatshuntersClient')
     def test_tiles_endpoint(self, mock_client_class):
         """Test tiles endpoint with mocked Statshunters client."""
-        mock_client = Mock()
-        mock_client.fetch_visited_tiles.return_value = set()
-        mock_client.get_tiles_in_bounds.return_value = {(100, 200), (101, 200)}
-        mock_client.tiles_to_geojson.return_value = {
+        mock_client_instance = Mock()
+        mock_client_instance.fetch_visited_tiles.return_value = set()
+        mock_client_instance.get_tiles_in_bounds.return_value = {(100, 200), (101, 200)}
+        mock_client_instance.tiles_to_geojson.return_value = {
             'type': 'FeatureCollection',
             'features': []
         }
-        mock_client_class.return_value = mock_client
+        mock_client_class.return_value = mock_client_instance
         
         request_data = {
             "west": 14.0,
