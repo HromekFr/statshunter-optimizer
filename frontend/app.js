@@ -442,10 +442,7 @@ async function loadTiles() {
     const shareLink = document.getElementById('share-link').value;
     const apiKey = document.getElementById('api-key').value;
     
-    if (!shareLink && !apiKey) {
-        showStatus('Please provide either a Statshunters share link or API key', 'error');
-        return;
-    }
+    // Note: Allow empty credentials - backend will use .env file if configured
     
     // Flag as manual interaction to prevent auto-loading conflicts
     isManualInteraction = true;
@@ -560,10 +557,7 @@ async function generateRoute() {
         return;
     }
     
-    if (!shareLink && !apiKey) {
-        showStatus('Please provide Statshunters credentials', 'error');
-        return;
-    }
+    // Note: Allow empty credentials - backend will use .env file if configured
     
     const requestData = {
         start_lat: startLat,
@@ -798,9 +792,7 @@ async function autoLoadTilesForView(showLoading = false) {
     const shareLink = document.getElementById('share-link').value;
     const apiKey = document.getElementById('api-key').value;
     
-    if (!shareLink && !apiKey) {
-        return; // No credentials, skip auto-loading
-    }
+    // Allow empty credentials - backend will use .env file if configured
     
     const bounds = map.getBounds();
     const requestData = {

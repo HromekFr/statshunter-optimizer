@@ -23,14 +23,17 @@
             <div class="section">
                 <h3>📊 Statshunters Account</h3>
                 <div class="form-group">
-                    <label for="share-link">Share Link:</label>
+                    <label for="share-link">Share Link (optional if configured in .env):</label>
                     <input type="url" id="share-link" placeholder="https://www.statshunters.com/share/abc123">
                     <small>Get this from your Statshunters profile settings</small>
                 </div>
                 <div class="form-group">
-                    <label for="api-key">Or Share Code:</label>
+                    <label for="api-key">Or Share Code (optional if configured in .env):</label>
                     <input type="text" id="api-key" placeholder="abc123def (the code part from your share link)">
                     <small>Paste just the code portion from your share link</small>
+                </div>
+                <div class="form-group">
+                    <small>💡 Tip: Configure STATSHUNTERS_SHARE_LINK in your .env file to skip entering credentials here</small>
                 </div>
             </div>
 
