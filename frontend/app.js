@@ -6,6 +6,8 @@ let startMarker;
 let currentTileData = null;
 let currentRoute = null;
 let bikeProfiles = null;
+let availableServices = null;
+let currentServiceBikeTypes = null;
 
 // Tile display layers
 let tileOverlays = {
@@ -30,6 +32,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeMap();
     bindEventListeners();
     loadFromLocalStorage();
+    loadRoutingServices();
     loadBikeProfiles();
     
     // Auto-load tiles if credentials are available (silently)
@@ -119,6 +122,9 @@ function bindEventListeners() {
     
     // Update bike type description when selection changes
     document.getElementById('bike-type').addEventListener('change', updateBikeTypeDescription);
+    
+    // Handle routing service selection changes
+    document.getElementById('routing-service').addEventListener('change', onRoutingServiceChange);
     
     // Tile display controls
     document.getElementById('auto-load-tiles').addEventListener('change', function() {
@@ -217,6 +223,166 @@ function updateBikeTypeDescription() {
         descriptionElement.textContent = 'Loading route preferences...';
         descriptionElement.style.color = '#6c757d';
     }
+}
+
+// Load available routing services
+async function loadRoutingServices() {
+    try {
+        const response = await fetch('/api/routing-services');
+        if (response.ok) {
+            const data = await response.json();
+            availableServices = data.services;
+            populateRoutingServiceSelect();
+            
+            // Load initial bike types for default service
+            const defaultService = document.getElementById('routing-service').value;
+            if (defaultService && defaultService !== '') {
+                loadBikeTypesForService(defaultService);
+            } else {
+                // No service selected, show all available bike types
+                loadAllBikeTypes();
+            }
+        }
+    } catch (error) {
+        console.warn('Could not load routing services:', error);
+        // Fallback: keep existing bike types
+    }
+}
+
+// Populate routing service dropdown
+function populateRoutingServiceSelect() {
+    const select = document.getElementById('routing-service');
+    const descriptionElement = document.getElementById('routing-service-description');
+    
+    // Clear existing options (keep placeholder)
+    const placeholderOption = select.querySelector('option[value=""]');
+    select.innerHTML = '';
+    if (placeholderOption) {
+        select.appendChild(placeholderOption);
+    }
+    
+    // Add available services
+    if (availableServices && availableServices.length > 0) {
+        availableServices.forEach(service => {
+            const option = document.createElement('option');
+            option.value = service.id;
+            option.textContent = `${service.name}`;
+            option.dataset.description = service.description;
+            option.dataset.strengths = service.strengths.join(', ');
+            select.appendChild(option);
+        });
+        
+        // Select first available service by default
+        if (availableServices.length > 0) {
+            select.value = availableServices[0].id;
+        }
+        
+        // Update description
+        updateRoutingServiceDescription();
+    } else {
+        // If no services available, show message
+        descriptionElement.textContent = 'No routing services available. Please configure API keys.';
+    }
+}
+
+// Handle routing service selection change
+function onRoutingServiceChange() {
+    const selectedService = document.getElementById('routing-service').value;
+    updateRoutingServiceDescription();
+    
+    if (selectedService && selectedService !== '') {
+        // Load bike types specific to selected service
+        loadBikeTypesForService(selectedService);
+    } else {
+        // No service selected, show placeholder or all types
+        loadAllBikeTypes();
+    }
+}
+
+// Update routing service description
+function updateRoutingServiceDescription() {
+    const select = document.getElementById('routing-service');
+    const descriptionElement = document.getElementById('routing-service-description');
+    const selectedOption = select.querySelector(`option[value="${select.value}"]`);
+    
+    if (selectedOption && selectedOption.dataset.description) {
+        let description = selectedOption.dataset.description;
+        if (selectedOption.dataset.strengths) {
+            description += ` • Strengths: ${selectedOption.dataset.strengths}`;
+        }
+        descriptionElement.textContent = description;
+    } else if (select.value === '' || !select.value) {
+        descriptionElement.textContent = 'Select a routing service to see available bike types';
+    } else {
+        descriptionElement.textContent = 'Loading service information...';
+    }
+}
+
+// Load bike types for a specific service
+function loadBikeTypesForService(serviceId) {
+    const service = availableServices?.find(s => s.id === serviceId);
+    if (service && service.bike_types) {
+        currentServiceBikeTypes = service.bike_types;
+        populateBikeTypeSelect(service.bike_types);
+    }
+}
+
+// Load all possible bike types (for auto-select mode)
+function loadAllBikeTypes() {
+    const allBikeTypes = {};
+    
+    if (availableServices) {
+        availableServices.forEach(service => {
+            Object.assign(allBikeTypes, service.bike_types);
+        });
+    }
+    
+    // Add default fallback types if no services loaded
+    if (Object.keys(allBikeTypes).length === 0) {
+        Object.assign(allBikeTypes, {
+            'road': '🚴‍♂️ Road Bike',
+            'gravel': '🚵‍♀️ Gravel Bike',
+            'mountain': '🏔️ Mountain Bike',
+            'ebike': '⚡ E-Bike'
+        });
+    }
+    
+    currentServiceBikeTypes = allBikeTypes;
+    populateBikeTypeSelect(allBikeTypes);
+}
+
+// Populate bike type dropdown
+function populateBikeTypeSelect(bikeTypes) {
+    const select = document.getElementById('bike-type');
+    const currentValue = select.value;
+    
+    // Clear existing options
+    select.innerHTML = '';
+    
+    // Add bike type options
+    Object.entries(bikeTypes).forEach(([key, displayName]) => {
+        const option = document.createElement('option');
+        option.value = key;
+        option.textContent = displayName;
+        select.appendChild(option);
+    });
+    
+    // Restore previous selection if still available
+    if (currentValue && bikeTypes[currentValue]) {
+        select.value = currentValue;
+    } else if (bikeTypes['mountain']) {
+        // Default to mountain bike if available (good with Mapy.cz)
+        select.value = 'mountain';
+    } else {
+        // Fall back to first available option
+        const firstKey = Object.keys(bikeTypes)[0];
+        if (firstKey) {
+            select.value = firstKey;
+        }
+    }
+    
+    // Update bike type description after changing options
+    updateBikeTypeDescription();
 }
 
 // Set start point on map and in form
@@ -381,6 +547,9 @@ async function generateRoute() {
     const preferUnvisited = document.getElementById('prefer-unvisited').checked;
     const shareLink = document.getElementById('share-link').value;
     const apiKey = document.getElementById('api-key').value;
+    const routingService = document.getElementById('routing-service').value;
+    const orsKey = document.getElementById('ors-key').value;
+    const mapyKey = document.getElementById('mapy-key').value;
     
     // Validation
     if (!startLat || !startLon) {
@@ -407,8 +576,14 @@ async function generateRoute() {
         prefer_unvisited: preferUnvisited
     };
     
+    // Add Statshunters credentials
     if (shareLink) requestData.share_link = shareLink;
     if (apiKey) requestData.api_key = apiKey;
+    
+    // Add routing service preference and API keys
+    if (routingService && routingService !== '') requestData.routing_service = routingService;
+    if (orsKey) requestData.ors_key = orsKey;
+    if (mapyKey) requestData.mapy_key = mapyKey;
     
     try {
         showLoadingSpinner(true);

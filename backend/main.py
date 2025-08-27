@@ -10,6 +10,8 @@ import logging
 
 from statshunters import StatshuntersClient
 from routing import RouteService
+from mapy_routing import MapyRouteService
+from routing_factory import RoutingServiceFactory
 from optimizer import TileOptimizer
 
 # Load environment variables
@@ -33,11 +35,11 @@ app.add_middleware(
 
 # Initialize services
 statshunters_client = None
-route_service = None
+routing_factory = None
 
 def initialize_services():
     """Initialize external service clients."""
-    global statshunters_client, route_service
+    global statshunters_client, routing_factory
     
     # Initialize Statshunters client
     share_link = os.getenv("STATSHUNTERS_SHARE_LINK")
@@ -46,12 +48,14 @@ def initialize_services():
     if share_link or api_key:
         statshunters_client = StatshuntersClient(share_link=share_link, api_key=api_key)
     
-    # Initialize routing service
-    ors_key = os.getenv("ORS_API_KEY")
-    if ors_key:
-        route_service = RouteService(ors_key)
+    # Initialize routing factory (handles both OpenRouteService and Mapy.cz)
+    routing_factory = RoutingServiceFactory()
+    
+    available_services = routing_factory.get_available_services()
+    if available_services:
+        logger.info(f"Initialized routing services: {[s['name'] for s in available_services]}")
     else:
-        logger.warning("ORS_API_KEY not found. Route generation will be disabled.")
+        logger.warning("No routing services available. Please configure ORS_API_KEY or MAPY_API_KEY.")
 
 # Initialize on startup
 initialize_services()
@@ -61,11 +65,14 @@ class RouteRequest(BaseModel):
     start_lat: float
     start_lon: float
     target_distance: float  # kilometers
-    bike_type: str = "gravel"  # road, gravel, mountain, ebike
+    bike_type: str = "mountain"  # road, gravel, mountain, ebike
     max_tiles: int = 30
     prefer_unvisited: bool = True
     share_link: Optional[str] = None
     api_key: Optional[str] = None
+    routing_service: Optional[str] = None  # 'openroute', 'mapy', or None to use factory default
+    ors_key: Optional[str] = None  # OpenRouteService API key
+    mapy_key: Optional[str] = None  # Mapy.cz API key
 
 class TileDataRequest(BaseModel):
     west: float
@@ -94,6 +101,15 @@ async def read_root():
 async def favicon():
     """Return a simple favicon to prevent 404s."""
     return Response(content="", media_type="image/x-icon")
+
+@app.get("/api/routing-services")
+async def get_routing_services():
+    """Get available routing services and their capabilities."""
+    if not routing_factory:
+        raise HTTPException(status_code=503, detail="Routing services not initialized")
+    
+    services = routing_factory.get_available_services()
+    return {"services": services}
 
 @app.post("/api/tiles")
 async def get_tiles(request: TileDataRequest):
@@ -140,12 +156,51 @@ async def get_tiles(request: TileDataRequest):
         logger.error(f"Error fetching tiles: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+def create_dynamic_routing_factory(request: RouteRequest) -> RoutingServiceFactory:
+    """Create routing factory with request-specific API keys."""
+    # Temporarily set environment variables for this request if provided
+    original_ors = os.environ.get("ORS_API_KEY")
+    original_mapy = os.environ.get("MAPY_API_KEY")
+    
+    if request.ors_key:
+        os.environ["ORS_API_KEY"] = request.ors_key
+    if request.mapy_key:
+        os.environ["MAPY_API_KEY"] = request.mapy_key
+    
+    try:
+        # Create new factory instance with updated environment
+        factory = RoutingServiceFactory()
+        return factory
+    finally:
+        # Restore original environment variables
+        if original_ors is not None:
+            os.environ["ORS_API_KEY"] = original_ors
+        elif "ORS_API_KEY" in os.environ:
+            del os.environ["ORS_API_KEY"]
+            
+        if original_mapy is not None:
+            os.environ["MAPY_API_KEY"] = original_mapy
+        elif "MAPY_API_KEY" in os.environ:
+            del os.environ["MAPY_API_KEY"]
+
 @app.post("/api/route", response_model=RouteResponse)
 async def generate_route(request: RouteRequest):
-    """Generate an optimized route for tile hunting."""
+    """Generate an optimized route for tile hunting using available routing services."""
     try:
-        if not route_service:
-            raise HTTPException(status_code=400, detail="OpenRouteService API key not configured")
+        # Create routing factory (use request-specific API keys if provided)
+        factory = create_dynamic_routing_factory(request) if (request.ors_key or request.mapy_key) else routing_factory
+        
+        if not factory:
+            raise HTTPException(status_code=503, detail="Routing services not available")
+        
+        # Check if any routing services are available
+        available_services = factory.get_available_services()
+        if not available_services:
+            raise HTTPException(
+                status_code=400, 
+                detail="No routing services configured. Please provide at least one API key: "
+                       "ors_key (OpenRouteService) or mapy_key (Mapy.cz)"
+            )
         
         # Use provided credentials or fall back to environment
         client = statshunters_client
@@ -182,27 +237,52 @@ async def generate_route(request: RouteRequest):
             prefer_unvisited=request.prefer_unvisited
         )
         
-        # Generate route through waypoints
+        # Create routing service using factory
         try:
-            route_data = route_service.generate_route(
+            # Create routing service instance using factory
+            routing_service = factory.create_service(
+                service_type=request.routing_service,
+                bike_type=request.bike_type
+            )
+            
+            # Validate bike type for selected service
+            if request.routing_service and not factory.validate_service_bike_combination(request.routing_service, request.bike_type):
+                available_bikes = factory.get_bike_types_for_service(request.routing_service)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Bike type '{request.bike_type}' is not supported by {request.routing_service}. "
+                           f"Available types: {list(available_bikes.keys())}"
+                )
+            
+            # Get service info for logging
+            service_name = "auto-selected"
+            if hasattr(routing_service, '__class__'):
+                service_name = "Mapy.cz" if "MapyRouteService" in str(type(routing_service)) else "OpenRouteService"
+            
+            logger.info(f"Using {service_name} for {request.bike_type} bike routing")
+            
+            # Generate route through waypoints
+            route_data = routing_service.generate_route(
                 waypoints=waypoints,
                 bike_type=request.bike_type,
                 optimize=True,
                 validate_waypoints=False  # Disabled to avoid rate limiting
             )
-        except Exception as route_error:
+            
+        except ValueError as routing_error:
             # Check for rate limiting first
-            error_msg = str(route_error)
+            error_msg = str(routing_error)
             if "rate limit" in error_msg.lower() or "429" in error_msg:
+                service_display = service_name if 'service_name' in locals() else "routing service"
                 raise HTTPException(
                     status_code=429,
-                    detail="OpenRouteService rate limit exceeded. Please wait a few minutes before trying again. "
+                    detail=f"{service_display} rate limit exceeded. Please wait a few minutes before trying again. "
                            "To reduce API usage, try: reducing target distance, using fewer max tiles, "
                            "or selecting an area closer to roads."
                 )
             
             # If routing fails, try with fewer waypoints or different strategy
-            logger.warning(f"Initial routing failed: {route_error}")
+            logger.warning(f"Initial routing failed with {service_name if 'service_name' in locals() else 'routing service'}: {routing_error}")
             
             if len(waypoints) > 2:
                 # Try with just start and end points
@@ -210,7 +290,7 @@ async def generate_route(request: RouteRequest):
                 simplified_waypoints = [waypoints[0], waypoints[-1]]
                 
                 try:
-                    route_data = route_service.generate_route(
+                    route_data = routing_service.generate_route(
                         waypoints=simplified_waypoints,
                         bike_type=request.bike_type,
                         optimize=False,
@@ -274,8 +354,9 @@ async def generate_route(request: RouteRequest):
             if tile_coord not in visited_tiles:
                 new_tiles.add(tile_coord)
         
-        # Generate GPX
-        gpx_content = route_service.create_gpx(route_data, name=f"Statshunters_{request.bike_type}_route")
+        # Generate GPX using the routing service that was used for route generation
+        service_prefix = service_name.replace(".", "_") if 'service_name' in locals() else "Route"
+        gpx_content = routing_service.create_gpx(route_data, name=f"{service_prefix}_{request.bike_type}_route")
         
         # Store GPX temporarily (in production, use proper storage)
         gpx_filename = f"route_{hash(gpx_content) % 1000000}.gpx"
