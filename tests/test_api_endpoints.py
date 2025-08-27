@@ -182,8 +182,11 @@ class TestStaticFiles(unittest.TestCase):
     def test_index_html(self):
         """Test that index.html is served."""
         response = self.client.get("/")
-        # Should return index.html or 404 if frontend not built
-        self.assertIn(response.status_code, [200, 404, 307])  # 307 is redirect to index.html
+        # Should return index.html if frontend exists, or API info if not
+        self.assertEqual(response.status_code, 200)
+        # If frontend exists, returns HTML; if not, returns JSON
+        content_type = response.headers.get('content-type', '')
+        self.assertIn(content_type, ['text/html; charset=utf-8', 'application/json'])
     
     def test_favicon(self):
         """Test favicon endpoint."""

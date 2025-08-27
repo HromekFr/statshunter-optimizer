@@ -93,7 +93,12 @@ class RouteResponse(BaseModel):
 @app.get("/")
 async def read_root():
     """Serve the main HTML page."""
-    return FileResponse("../frontend/index.html")
+    frontend_index = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html")
+    if os.path.exists(frontend_index):
+        return FileResponse(frontend_index)
+    else:
+        # For testing or when frontend is not available
+        return {"message": "Statshunters Route Optimizer API", "docs": "/docs"}
 
 @app.get("/favicon.ico")
 async def favicon():
