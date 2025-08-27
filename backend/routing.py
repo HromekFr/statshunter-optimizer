@@ -15,6 +15,54 @@ class RouteService:
         'ebike': 'cycling-electric'
     }
     
+    # Routing options for each bike type to prefer cycling infrastructure
+    PROFILE_OPTIONS = {
+        'road': {
+            'avoid_features': ['highways'],
+            'prefer_greenness': False,  # Road bikes prefer faster routes
+            'profile_params': {
+                'weightings': {
+                    'steepness_difficulty': 1,  # Moderate difficulty
+                    'green': 0.2,
+                    'quiet': 0.1
+                }
+            }
+        },
+        'gravel': {
+            'avoid_features': ['highways'],
+            'prefer_greenness': True,  # Gravel bikes can use green routes
+            'profile_params': {
+                'weightings': {
+                    'steepness_difficulty': 2,  # Amateur level - can handle more terrain
+                    'green': 0.8,  # Prefer green/quiet routes
+                    'quiet': 0.8
+                }
+            }
+        },
+        'mountain': {
+            'avoid_features': [],  # Mountain bikes can handle most terrain
+            'prefer_greenness': True,
+            'profile_params': {
+                'weightings': {
+                    'steepness_difficulty': 3,  # Pro level - can handle steep terrain
+                    'green': 0.9,  # Strong preference for trails/paths
+                    'quiet': 0.9
+                }
+            }
+        },
+        'ebike': {
+            'avoid_features': ['highways'],
+            'prefer_greenness': True,  # E-bikes good for leisure routes
+            'profile_params': {
+                'weightings': {
+                    'steepness_difficulty': 0,  # Novice level - e-bike assists with hills
+                    'green': 0.6,
+                    'quiet': 0.6
+                }
+            }
+        }
+    }
+    
     def __init__(self, api_key: str):
         """
         Initialize route service with OpenRouteService API key.
@@ -23,6 +71,33 @@ class RouteService:
             api_key: OpenRouteService API key
         """
         self.client = openrouteservice.Client(key=api_key)
+    
+    def get_route_preferences(self, bike_type: str) -> Dict:
+        """
+        Get routing preferences description for a bike type.
+        
+        Args:
+            bike_type: Type of bike
+            
+        Returns:
+            Dictionary describing routing preferences
+        """
+        profile_options = self.PROFILE_OPTIONS.get(bike_type, {})
+        
+        descriptions = {
+            'road': 'Optimized for road cycling: avoids highways, moderate difficulty, prioritizes speed over scenery',
+            'gravel': 'Optimized for gravel/adventure cycling: avoids highways, prefers quiet green routes and cycling paths, handles varied terrain',
+            'mountain': 'Optimized for mountain biking: allows all terrain including trails, strongly prefers green routes and paths, handles steep terrain',
+            'ebike': 'Optimized for e-bike touring: avoids highways, prefers quiet scenic routes, gentle gradients (e-motor assists with hills)'
+        }
+        
+        return {
+            'profile': self.PROFILES.get(bike_type, 'cycling-regular'),
+            'description': descriptions.get(bike_type, 'Standard cycling route'),
+            'avoids': profile_options.get('avoid_features', []),
+            'prefers_green_routes': profile_options.get('prefer_greenness', False),
+            'difficulty_level': profile_options.get('profile_params', {}).get('weightings', {}).get('steepness_difficulty', 1)
+        }
     
     def validate_and_snap_waypoints(self, waypoints: List[Tuple[float, float]], bike_type: str = 'gravel') -> List[Tuple[float, float]]:
         """
@@ -169,18 +244,41 @@ class RouteService:
                 logger.warning(f"Reduced waypoints from {original_count} to {len(waypoints)} after validation")
         
         profile = self.PROFILES[bike_type]
+        profile_options = self.PROFILE_OPTIONS.get(bike_type, {})
+        
+        # Build routing options
+        routing_options = {}
+        
+        # Add avoidance preferences
+        if profile_options.get('avoid_features'):
+            routing_options['avoid_features'] = profile_options['avoid_features']
+        
+        # Add profile-specific parameters
+        if profile_options.get('profile_params'):
+            routing_options.update(profile_options['profile_params'])
         
         try:
-            # Generate route
-            route = self.client.directions(
-                coordinates=waypoints,
-                profile=profile,
-                format='geojson',
-                optimize_waypoints=optimize,
-                geometry=return_geometry,
-                instructions=False,  # We don't need turn-by-turn instructions
-                elevation=True  # Include elevation data
-            )
+            # Generate route with cycling-optimized options
+            request_params = {
+                'coordinates': waypoints,
+                'profile': profile,
+                'format': 'geojson',
+                'optimize_waypoints': optimize,
+                'geometry': return_geometry,
+                'instructions': False,  # We don't need turn-by-turn instructions
+                'elevation': True,  # Include elevation data
+                'radiuses': [-1] * len(waypoints)  # Allow snapping to roads
+            }
+            
+            # Add cycling-specific options
+            if routing_options:
+                request_params['options'] = routing_options
+            
+            route = self.client.directions(**request_params)
+            
+            logger.info(f"Generated {bike_type} route with cycling preferences: "
+                       f"avoid={profile_options.get('avoid_features', [])}, "
+                       f"green preference={profile_options.get('prefer_greenness', False)}")
             
             # Extract key metrics
             if route and 'features' in route and len(route['features']) > 0:

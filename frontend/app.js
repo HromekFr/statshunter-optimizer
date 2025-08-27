@@ -6,11 +6,15 @@ let startMarker;
 let currentTileData = null;
 let currentRoute = null;
 
+// Global variables
+let bikeProfiles = null;
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     initializeMap();
     bindEventListeners();
     loadFromLocalStorage();
+    loadBikeProfiles();
 });
 
 // Initialize Leaflet map
@@ -74,6 +78,9 @@ function bindEventListeners() {
     inputs.forEach(input => {
         input.addEventListener('change', saveToLocalStorage);
     });
+    
+    // Update bike type description when selection changes
+    document.getElementById('bike-type').addEventListener('change', updateBikeTypeDescription);
 }
 
 // Load configuration from localStorage
@@ -110,6 +117,45 @@ function saveToLocalStorage() {
         }
     });
     localStorage.setItem('statshunters-config', JSON.stringify(config));
+}
+
+// Load bike profiles from API
+async function loadBikeProfiles() {
+    try {
+        const response = await fetch('/api/bike-profiles');
+        if (response.ok) {
+            const data = await response.json();
+            bikeProfiles = data.profiles;
+            updateBikeTypeDescription(); // Update description with loaded data
+        }
+    } catch (error) {
+        console.warn('Could not load bike profiles:', error);
+    }
+}
+
+// Update bike type description
+function updateBikeTypeDescription() {
+    const bikeType = document.getElementById('bike-type').value;
+    const descriptionElement = document.getElementById('bike-type-description');
+    
+    if (bikeProfiles && bikeProfiles[bikeType]) {
+        const profile = bikeProfiles[bikeType];
+        let description = profile.description;
+        
+        if (profile.avoids && profile.avoids.length > 0) {
+            description += ` • Avoids: ${profile.avoids.join(', ')}`;
+        }
+        
+        if (profile.prefers_green_routes) {
+            description += ` • Prefers cycling paths and quiet routes`;
+        }
+        
+        descriptionElement.textContent = description;
+        descriptionElement.style.color = '#495057';
+    } else {
+        descriptionElement.textContent = 'Loading route preferences...';
+        descriptionElement.style.color = '#6c757d';
+    }
 }
 
 // Set start point on map and in form

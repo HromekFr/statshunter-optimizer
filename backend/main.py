@@ -281,6 +281,18 @@ async def download_gpx(filename: str):
         logger.error(f"Error downloading GPX: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/bike-profiles")
+async def get_bike_profiles():
+    """Get information about available bike profiles and their routing preferences."""
+    if not route_service:
+        raise HTTPException(status_code=400, detail="Routing service not available")
+    
+    profiles = {}
+    for bike_type in route_service.PROFILES.keys():
+        profiles[bike_type] = route_service.get_route_preferences(bike_type)
+    
+    return {"profiles": profiles}
+
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
