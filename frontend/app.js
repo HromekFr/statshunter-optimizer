@@ -361,7 +361,22 @@ async function generateRoute() {
         showStatus('Route generated successfully!', 'success');
         
     } catch (error) {
-        showStatus('Error generating route: ' + error.message, 'error');
+        let errorMessage = 'Error generating route: ' + error.message;
+        let errorType = 'error';
+        
+        // Handle different types of errors
+        if (error.message.includes('rate limit') || error.message.includes('429')) {
+            errorMessage = '⏳ Rate limit exceeded. Please wait a few minutes before trying again. Consider reducing target distance or max tiles.';
+            errorType = 'warning';
+        } else if (error.message.includes('API configuration issues')) {
+            errorMessage = '⚙️ Temporary API issue. This has been reported to developers. Please try again in a few minutes.';
+            errorType = 'warning';
+        } else if (error.message.includes('no suitable roads')) {
+            errorMessage = '🛣️ No suitable roads found for cycling in this area. Try a different start point or reduce the distance.';
+            errorType = 'warning';
+        }
+        
+        showStatus(errorMessage, errorType);
         console.error('Route generation error:', error);
     } finally {
         showLoading(false);

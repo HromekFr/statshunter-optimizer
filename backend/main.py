@@ -191,6 +191,16 @@ async def generate_route(request: RouteRequest):
                 validate_waypoints=True
             )
         except Exception as route_error:
+            # Check for rate limiting first
+            error_msg = str(route_error)
+            if "rate limit" in error_msg.lower() or "429" in error_msg:
+                raise HTTPException(
+                    status_code=429,
+                    detail="OpenRouteService rate limit exceeded. Please wait a few minutes before trying again. "
+                           "To reduce API usage, try: reducing target distance, using fewer max tiles, "
+                           "or selecting an area closer to roads."
+                )
+            
             # If routing fails, try with fewer waypoints or different strategy
             logger.warning(f"Initial routing failed: {route_error}")
             
@@ -208,21 +218,47 @@ async def generate_route(request: RouteRequest):
                     )
                     logger.info("Simplified route generated successfully")
                 except Exception as simple_error:
+                    simple_error_msg = str(simple_error)
                     logger.error(f"Simplified routing also failed: {simple_error}")
+                    
+                    # Check for rate limiting in simplified route
+                    if "rate limit" in simple_error_msg.lower() or "429" in simple_error_msg:
+                        raise HTTPException(
+                            status_code=429,
+                            detail="OpenRouteService rate limit exceeded. Please wait a few minutes before trying again."
+                        )
+                    
+                    # Provide specific error message based on the error type
+                    if "2012" in simple_error_msg and "weightings" in simple_error_msg:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Route generation failed due to API configuration issues. "
+                                   "This is a known issue and has been reported to the developers. "
+                                   "Try again in a few minutes or contact support."
+                        )
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Could not generate route in this area. The selected coordinates may be in "
+                                   f"areas without suitable roads for {request.bike_type} cycling. "
+                                   f"Try selecting a different start point or reducing the distance. "
+                                   f"Error: {simple_error_msg}"
+                        )
+            else:
+                # Handle single route failure
+                if "2012" in error_msg and "weightings" in error_msg:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Could not generate route in this area. The selected coordinates may be in "
-                               f"areas without suitable roads for {request.bike_type} cycling. "
-                               f"Try selecting a different start point or reducing the distance. "
-                               f"Error details: {str(simple_error)}"
+                        detail="Route generation failed due to API configuration issues. "
+                               "This is a known issue. Try again in a few minutes."
                     )
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Could not generate route between the selected points. "
-                           f"The coordinates may be in areas without suitable roads for {request.bike_type} cycling. "
-                           f"Try selecting a different start point. Error details: {str(route_error)}"
-                )
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Could not generate route between the selected points. "
+                               f"The coordinates may be in areas without suitable roads for {request.bike_type} cycling. "
+                               f"Try selecting a different start point. Error: {error_msg}"
+                    )
         
         # Calculate tiles covered by route
         # This is simplified - you'd want to check actual route geometry
