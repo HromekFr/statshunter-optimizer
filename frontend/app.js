@@ -5,9 +5,23 @@ let routeLayer;
 let startMarker;
 let currentTileData = null;
 let currentRoute = null;
-
-// Global variables
 let bikeProfiles = null;
+
+// Tile display layers
+let tileOverlays = {
+    visited: null,
+    unvisited: null,
+    squares: null,
+    maxCluster: null,
+    clusters: null,
+    routes: null,
+    newRoute: null,
+    grid: null
+};
+
+// Tile display settings
+let tileOpacity = 0.4;
+let autoLoadTiles = true;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -15,6 +29,13 @@ document.addEventListener('DOMContentLoaded', function() {
     bindEventListeners();
     loadFromLocalStorage();
     loadBikeProfiles();
+    
+    // Auto-load tiles if credentials are available
+    setTimeout(() => {
+        if (autoLoadTiles) {
+            autoLoadTilesForView();
+        }
+    }, 500); // Small delay to ensure map is ready
 });
 
 // Initialize Leaflet map
@@ -33,6 +54,13 @@ function initializeMap() {
     // Handle map clicks for setting start point
     map.on('click', function(e) {
         setStartPoint(e.latlng.lat, e.latlng.lng);
+    });
+    
+    // Auto-load tiles when map view changes
+    map.on('moveend', function() {
+        if (autoLoadTiles) {
+            autoLoadTilesForView();
+        }
     });
 }
 
@@ -81,6 +109,29 @@ function bindEventListeners() {
     
     // Update bike type description when selection changes
     document.getElementById('bike-type').addEventListener('change', updateBikeTypeDescription);
+    
+    // Tile display controls
+    document.getElementById('auto-load-tiles').addEventListener('change', function() {
+        autoLoadTiles = this.checked;
+        if (autoLoadTiles) {
+            autoLoadTilesForView();
+        }
+    });
+    
+    document.getElementById('tile-opacity').addEventListener('input', function() {
+        tileOpacity = parseFloat(this.value);
+        document.getElementById('opacity-value').textContent = Math.round(tileOpacity * 100) + '%';
+        updateTileOpacity();
+    });
+    
+    // Display option checkboxes
+    const displayOptions = ['show-tiles', 'show-squares', 'show-max-cluster', 'show-cluster', 
+                           'show-routes', 'show-new-route', 'show-grid'];
+    displayOptions.forEach(optionId => {
+        document.getElementById(optionId).addEventListener('change', function() {
+            updateTileDisplays();
+        });
+    });
 }
 
 // Load configuration from localStorage
@@ -275,7 +326,8 @@ function displayTiles(tileData) {
             L.polygon(bounds, {
                 color: '#228B22',
                 fillColor: '#228B22',
-                fillOpacity: 0.6,
+                fillOpacity: tileOpacity,
+                opacity: Math.min(tileOpacity + 0.2, 1.0),
                 weight: 1
             }).bindTooltip('Visited Tile').addTo(tilesLayer);
         });
@@ -290,13 +342,17 @@ function displayTiles(tileData) {
             L.polygon(bounds, {
                 color: '#FF6347',
                 fillColor: '#FF6347',
-                fillOpacity: 0.6,
+                fillOpacity: tileOpacity,
+                opacity: Math.min(tileOpacity + 0.2, 1.0),
                 weight: 1
             }).bindTooltip('Unvisited Tile').addTo(tilesLayer);
         });
     }
     
     tilesLayer.addTo(map);
+    
+    // Apply display options after loading tiles
+    updateTileDisplays();
 }
 
 // Generate optimized route
@@ -548,4 +604,203 @@ function showStatus(message, type = 'info') {
             statusContainer.removeChild(messageDiv);
         }
     });
+}
+
+// Auto-load tiles for current map view
+async function autoLoadTilesForView() {
+    const shareLink = document.getElementById('share-link').value;
+    const apiKey = document.getElementById('api-key').value;
+    
+    if (!shareLink && !apiKey) {
+        return; // No credentials, skip auto-loading
+    }
+    
+    const bounds = map.getBounds();
+    const requestData = {
+        west: bounds.getWest(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        north: bounds.getNorth()
+    };
+    
+    if (shareLink) requestData.share_link = shareLink;
+    if (apiKey) requestData.api_key = apiKey;
+    
+    try {
+        const response = await fetch('/api/tiles', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            currentTileData = data;
+            displayTiles(data);
+            console.log(`Auto-loaded ${data.stats.total_tiles} tiles`);
+        }
+    } catch (error) {
+        console.warn('Auto-load tiles failed:', error);
+        // Don't show error to user for auto-loading
+    }
+}
+
+// Update tile opacity
+function updateTileOpacity() {
+    if (tilesLayer) {
+        tilesLayer.eachLayer(function(layer) {
+            layer.setStyle({
+                fillOpacity: tileOpacity,
+                opacity: Math.min(tileOpacity + 0.2, 1.0) // Border slightly more opaque
+            });
+        });
+    }
+    
+    // Update other overlays
+    Object.values(tileOverlays).forEach(overlay => {
+        if (overlay && map.hasLayer(overlay)) {
+            overlay.eachLayer(function(layer) {
+                if (layer.setStyle) {
+                    layer.setStyle({
+                        fillOpacity: tileOpacity * 0.8,
+                        opacity: Math.min(tileOpacity + 0.1, 1.0)
+                    });
+                }
+            });
+        }
+    });
+}
+
+// Update tile displays based on checkbox states
+function updateTileDisplays() {
+    const showTiles = document.getElementById('show-tiles').checked;
+    const showSquares = document.getElementById('show-squares').checked;
+    const showMaxCluster = document.getElementById('show-max-cluster').checked;
+    const showCluster = document.getElementById('show-cluster').checked;
+    const showRoutes = document.getElementById('show-routes').checked;
+    const showNewRoute = document.getElementById('show-new-route').checked;
+    const showGrid = document.getElementById('show-grid').checked;
+    
+    // Main tiles layer
+    if (tilesLayer) {
+        if (showTiles && !map.hasLayer(tilesLayer)) {
+            map.addLayer(tilesLayer);
+        } else if (!showTiles && map.hasLayer(tilesLayer)) {
+            map.removeLayer(tilesLayer);
+        }
+    }
+    
+    // Grid overlay
+    if (showGrid && !tileOverlays.grid) {
+        createGridOverlay();
+    } else if (!showGrid && tileOverlays.grid) {
+        map.removeLayer(tileOverlays.grid);
+        tileOverlays.grid = null;
+    }
+    
+    // Squares overlay (tile boundaries)
+    if (showSquares && !tileOverlays.squares && currentTileData) {
+        createSquaresOverlay();
+    } else if (!showSquares && tileOverlays.squares) {
+        map.removeLayer(tileOverlays.squares);
+        tileOverlays.squares = null;
+    }
+    
+    // Route overlays
+    if (showNewRoute && currentRoute && routeLayer) {
+        if (!map.hasLayer(routeLayer)) {
+            map.addLayer(routeLayer);
+        }
+    } else if (!showNewRoute && routeLayer && map.hasLayer(routeLayer)) {
+        // Don't remove the route layer completely, just hide it
+        routeLayer.setStyle({opacity: 0});
+    }
+    
+    // Re-apply the route style if showing
+    if (showNewRoute && routeLayer) {
+        routeLayer.setStyle({opacity: 0.8});
+    }
+}
+
+// Create grid overlay showing tile boundaries
+function createGridOverlay() {
+    tileOverlays.grid = L.layerGroup();
+    
+    const bounds = map.getBounds();
+    const zoom = 14; // Statshunters zoom level
+    
+    // Calculate tile bounds for current view
+    const minTileX = Math.floor((bounds.getWest() + 180) / 360 * Math.pow(2, zoom));
+    const maxTileX = Math.floor((bounds.getEast() + 180) / 360 * Math.pow(2, zoom));
+    const minTileY = Math.floor((1 - Math.log(Math.tan(bounds.getNorth() * Math.PI / 180) + 1 / Math.cos(bounds.getNorth() * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+    const maxTileY = Math.floor((1 - Math.log(Math.tan(bounds.getSouth() * Math.PI / 180) + 1 / Math.cos(bounds.getSouth() * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+    
+    // Draw grid lines
+    for (let x = minTileX; x <= maxTileX + 1; x++) {
+        const lng = x / Math.pow(2, zoom) * 360 - 180;
+        L.polyline([
+            [bounds.getSouth(), lng],
+            [bounds.getNorth(), lng]
+        ], {
+            color: '#666',
+            weight: 1,
+            opacity: 0.3
+        }).addTo(tileOverlays.grid);
+    }
+    
+    for (let y = minTileY; y <= maxTileY + 1; y++) {
+        const n = Math.PI - 2 * Math.PI * y / Math.pow(2, zoom);
+        const lat = 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+        L.polyline([
+            [lat, bounds.getWest()],
+            [lat, bounds.getEast()]
+        ], {
+            color: '#666',
+            weight: 1,
+            opacity: 0.3
+        }).addTo(tileOverlays.grid);
+    }
+    
+    map.addLayer(tileOverlays.grid);
+}
+
+// Create squares overlay (enhanced tile boundaries)
+function createSquaresOverlay() {
+    if (!currentTileData) return;
+    
+    tileOverlays.squares = L.layerGroup();
+    
+    // Add visited tiles with square outlines
+    if (currentTileData.visited && currentTileData.visited.features) {
+        currentTileData.visited.features.forEach(feature => {
+            const coords = feature.geometry.coordinates[0];
+            const bounds = coords.map(coord => [coord[1], coord[0]]);
+            
+            L.polygon(bounds, {
+                color: '#228B22',
+                fillColor: 'transparent',
+                weight: 2,
+                opacity: 0.8
+            }).bindTooltip('Visited Tile (Square View)').addTo(tileOverlays.squares);
+        });
+    }
+    
+    // Add unvisited tiles with square outlines  
+    if (currentTileData.unvisited && currentTileData.unvisited.features) {
+        currentTileData.unvisited.features.forEach(feature => {
+            const coords = feature.geometry.coordinates[0];
+            const bounds = coords.map(coord => [coord[1], coord[0]]);
+            
+            L.polygon(bounds, {
+                color: '#FF6347',
+                fillColor: 'transparent', 
+                weight: 2,
+                opacity: 0.6
+            }).bindTooltip('Unvisited Tile (Square View)').addTo(tileOverlays.squares);
+        });
+    }
+    
+    map.addLayer(tileOverlays.squares);
 }
