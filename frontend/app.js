@@ -22,6 +22,8 @@ let tileOverlays = {
 // Tile display settings
 let tileOpacity = 0.4;
 let autoLoadTiles = true;
+let autoLoadTimeout = null;
+let isManualInteraction = false;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -30,10 +32,10 @@ document.addEventListener('DOMContentLoaded', function() {
     loadFromLocalStorage();
     loadBikeProfiles();
     
-    // Auto-load tiles if credentials are available
+    // Auto-load tiles if credentials are available (silently)
     setTimeout(() => {
         if (autoLoadTiles) {
-            autoLoadTilesForView();
+            autoLoadTilesForView(false); // Don't show loading spinner on startup
         }
     }, 500); // Small delay to ensure map is ready
 });
@@ -56,11 +58,19 @@ function initializeMap() {
         setStartPoint(e.latlng.lat, e.latlng.lng);
     });
     
-    // Auto-load tiles when map view changes
+    // Auto-load tiles when map view changes (with debouncing)
     map.on('moveend', function() {
-        if (autoLoadTiles) {
-            autoLoadTilesForView();
+        if (autoLoadTiles && !isManualInteraction) {
+            // Debounce auto-loading to prevent excessive API calls
+            if (autoLoadTimeout) {
+                clearTimeout(autoLoadTimeout);
+            }
+            autoLoadTimeout = setTimeout(() => {
+                autoLoadTilesForView(false); // Don't show loading spinner for auto-loading
+            }, 1000); // Wait 1 second after user stops moving
         }
+        // Reset manual interaction flag
+        isManualInteraction = false;
     });
 }
 
@@ -211,6 +221,9 @@ function updateBikeTypeDescription() {
 
 // Set start point on map and in form
 function setStartPoint(lat, lon) {
+    // Flag this as a manual interaction to prevent auto-loading
+    isManualInteraction = true;
+    
     document.getElementById('start-lat').value = lat.toFixed(6);
     document.getElementById('start-lon').value = lon.toFixed(6);
     
@@ -238,18 +251,18 @@ function setStartPoint(lat, lon) {
 // Get current location
 function getCurrentLocation() {
     if (navigator.geolocation) {
-        showLoading(true);
+        showLoadingSpinner(true);
         navigator.geolocation.getCurrentPosition(
             function(position) {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
                 setStartPoint(lat, lon);
                 map.setView([lat, lon], 12);
-                showLoading(false);
+                showLoadingSpinner(false);
                 showStatus('Current location set as start point', 'success');
             },
             function(error) {
-                showLoading(false);
+                showLoadingSpinner(false);
                 showStatus('Error getting location: ' + error.message, 'error');
             }
         );
@@ -258,7 +271,7 @@ function getCurrentLocation() {
     }
 }
 
-// Load tiles from Statshunters
+// Load tiles from Statshunters (manual reload)
 async function loadTiles() {
     const shareLink = document.getElementById('share-link').value;
     const apiKey = document.getElementById('api-key').value;
@@ -267,6 +280,9 @@ async function loadTiles() {
         showStatus('Please provide either a Statshunters share link or API key', 'error');
         return;
     }
+    
+    // Flag as manual interaction to prevent auto-loading conflicts
+    isManualInteraction = true;
     
     const bounds = map.getBounds();
     const requestData = {
@@ -280,7 +296,7 @@ async function loadTiles() {
     if (apiKey) requestData.api_key = apiKey;
     
     try {
-        showLoading(true);
+        showLoadingSpinner(true);
         const response = await fetch('/api/tiles', {
             method: 'POST',
             headers: {
@@ -304,7 +320,7 @@ async function loadTiles() {
         showStatus('Error loading tiles: ' + error.message, 'error');
         console.error('Tile loading error:', error);
     } finally {
-        showLoading(false);
+        showLoadingSpinner(false);
     }
 }
 
@@ -395,7 +411,7 @@ async function generateRoute() {
     if (apiKey) requestData.api_key = apiKey;
     
     try {
-        showLoading(true);
+        showLoadingSpinner(true);
         const response = await fetch('/api/route', {
             method: 'POST',
             headers: {
@@ -435,7 +451,7 @@ async function generateRoute() {
         showStatus(errorMessage, errorType);
         console.error('Route generation error:', error);
     } finally {
-        showLoading(false);
+        showLoadingSpinner(false);
     }
 }
 
@@ -577,7 +593,7 @@ function exportTileData() {
 }
 
 // Show loading spinner
-function showLoading(show) {
+function showLoadingSpinner(show) {
     document.getElementById('loading').style.display = show ? 'flex' : 'none';
 }
 
@@ -607,7 +623,7 @@ function showStatus(message, type = 'info') {
 }
 
 // Auto-load tiles for current map view
-async function autoLoadTilesForView() {
+async function autoLoadTilesForView(showLoading = false) {
     const shareLink = document.getElementById('share-link').value;
     const apiKey = document.getElementById('api-key').value;
     
@@ -627,6 +643,10 @@ async function autoLoadTilesForView() {
     if (apiKey) requestData.api_key = apiKey;
     
     try {
+        if (showLoading) {
+            showLoadingSpinner(true);
+        }
+        
         const response = await fetch('/api/tiles', {
             method: 'POST',
             headers: {
@@ -644,6 +664,10 @@ async function autoLoadTilesForView() {
     } catch (error) {
         console.warn('Auto-load tiles failed:', error);
         // Don't show error to user for auto-loading
+    } finally {
+        if (showLoading) {
+            showLoadingSpinner(false);
+        }
     }
 }
 
