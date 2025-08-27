@@ -548,8 +548,6 @@ async function generateRoute() {
     const shareLink = document.getElementById('share-link').value;
     const apiKey = document.getElementById('api-key').value;
     const routingService = document.getElementById('routing-service').value;
-    const orsKey = document.getElementById('ors-key').value;
-    const mapyKey = document.getElementById('mapy-key').value;
     
     // Validation
     if (!startLat || !startLon) {
@@ -580,10 +578,8 @@ async function generateRoute() {
     if (shareLink) requestData.share_link = shareLink;
     if (apiKey) requestData.api_key = apiKey;
     
-    // Add routing service preference and API keys
+    // Add routing service preference
     if (routingService && routingService !== '') requestData.routing_service = routingService;
-    if (orsKey) requestData.ors_key = orsKey;
-    if (mapyKey) requestData.mapy_key = mapyKey;
     
     try {
         showLoadingSpinner(true);

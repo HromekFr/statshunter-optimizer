@@ -71,8 +71,6 @@ class RouteRequest(BaseModel):
     share_link: Optional[str] = None
     api_key: Optional[str] = None
     routing_service: Optional[str] = None  # 'openroute', 'mapy', or None to use factory default
-    ors_key: Optional[str] = None  # OpenRouteService API key
-    mapy_key: Optional[str] = None  # Mapy.cz API key
 
 class TileDataRequest(BaseModel):
     west: float
@@ -156,39 +154,13 @@ async def get_tiles(request: TileDataRequest):
         logger.error(f"Error fetching tiles: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-def create_dynamic_routing_factory(request: RouteRequest) -> RoutingServiceFactory:
-    """Create routing factory with request-specific API keys."""
-    # Temporarily set environment variables for this request if provided
-    original_ors = os.environ.get("ORS_API_KEY")
-    original_mapy = os.environ.get("MAPY_API_KEY")
-    
-    if request.ors_key:
-        os.environ["ORS_API_KEY"] = request.ors_key
-    if request.mapy_key:
-        os.environ["MAPY_API_KEY"] = request.mapy_key
-    
-    try:
-        # Create new factory instance with updated environment
-        factory = RoutingServiceFactory()
-        return factory
-    finally:
-        # Restore original environment variables
-        if original_ors is not None:
-            os.environ["ORS_API_KEY"] = original_ors
-        elif "ORS_API_KEY" in os.environ:
-            del os.environ["ORS_API_KEY"]
-            
-        if original_mapy is not None:
-            os.environ["MAPY_API_KEY"] = original_mapy
-        elif "MAPY_API_KEY" in os.environ:
-            del os.environ["MAPY_API_KEY"]
 
 @app.post("/api/route", response_model=RouteResponse)
 async def generate_route(request: RouteRequest):
     """Generate an optimized route for tile hunting using available routing services."""
     try:
-        # Create routing factory (use request-specific API keys if provided)
-        factory = create_dynamic_routing_factory(request) if (request.ors_key or request.mapy_key) else routing_factory
+        # Use the global routing factory (configured via environment variables)
+        factory = routing_factory
         
         if not factory:
             raise HTTPException(status_code=503, detail="Routing services not available")
@@ -198,8 +170,8 @@ async def generate_route(request: RouteRequest):
         if not available_services:
             raise HTTPException(
                 status_code=400, 
-                detail="No routing services configured. Please provide at least one API key: "
-                       "ors_key (OpenRouteService) or mapy_key (Mapy.cz)"
+                detail="No routing services configured. Please configure API keys in your .env file: "
+                       "ORS_API_KEY (OpenRouteService) or MAPY_API_KEY (Mapy.cz)"
             )
         
         # Use provided credentials or fall back to environment

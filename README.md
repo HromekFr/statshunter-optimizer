@@ -32,20 +32,20 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
    pip install -r requirements.txt
    ```
 
-2. **Configure environment:**
+2. **Configure environment (REQUIRED):**
    ```bash
    cp .env.example .env
    ```
-   Edit `.env` file with your credentials:
+   **Edit `.env` file with your API keys - this is required for routing services:**
    ```
-   # Statshunters credentials (required)
+   # Routing services (at least one required for route generation)
+   ORS_API_KEY=your_openrouteservice_key      # Global routing
+   MAPY_API_KEY=your_mapy_cz_key              # Central European routing
+   
+   # Statshunters credentials (optional - can also be entered in UI)
    STATSHUNTERS_SHARE_LINK=https://www.statshunters.com/share/YOUR_CODE
    # OR
    STATSHUNTERS_API_KEY=abc123def
-   
-   # Routing services (at least one required)
-   ORS_API_KEY=your_openrouteservice_key      # Global routing
-   MAPY_API_KEY=your_mapy_cz_key              # Central European routing
    ```
 
 3. **Run the application:**
@@ -88,7 +88,7 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
 
 ### Basic Route Planning
 
-1. **Configure Credentials**: Enter your Statshunters credentials and routing API keys
+1. **Configure Credentials**: Enter your Statshunters credentials in the UI (routing API keys are configured via .env file)
 2. **Select Routing Service**: Choose between OpenRouteService or Mapy.cz
 3. **Set Start Point**: Click on the map or use current location
 4. **Configure Route**: 
@@ -127,7 +127,7 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
 
 - `GET /api/routing-services` - Get available routing services and bike types
 - `POST /api/tiles` - Fetch tile data for map bounds
-- `POST /api/route` - Generate optimized route with service selection
+- `POST /api/route` - Generate optimized route with service selection (uses .env API keys)
 - `GET /api/download/{filename}` - Download GPX files
 - `GET /api/bike-profiles` - Get bike type profiles for selected service
 
@@ -169,8 +169,9 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
    - Increase target distance
    - Move start point to area with more tiles
 
-3. **"Route generation failed"**
-   - Check your routing API keys (OpenRouteService or Mapy.cz)
+3. **"Route generation failed"** or **"No routing services configured"**
+   - Check your `.env` file has valid API keys (ORS_API_KEY or MAPY_API_KEY)
+   - Restart the backend after updating .env file
    - Try different routing service if one fails
    - Ensure start point is on accessible roads
 
@@ -184,6 +185,12 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
 - Limit max tiles (10-30) for faster processing
 - Use appropriate bike type and routing service for terrain
 - Mapy.cz has higher rate limits (250k vs 2k daily) for heavy usage
+
+### Security Notes
+
+- **API Keys**: Routing API keys are configured via `.env` file only (not in UI) for security
+- **Never commit**: Add `.env` to your `.gitignore` to avoid committing API keys
+- **Environment separation**: Use different API keys for development and production
 
 ## Contributing
 
