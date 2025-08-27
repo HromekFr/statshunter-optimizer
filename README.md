@@ -37,8 +37,8 @@ A web-based route planner that optimizes cycling routes to discover new Statshun
    # Option 1: Use Statshunters share link
    STATSHUNTERS_SHARE_LINK=https://www.statshunters.com/share/YOUR_CODE
    
-   # Option 2: Use API key (if available)
-   STATSHUNTERS_API_KEY=your_api_key
+   # Option 2: Use share code only (the code part from your share link)
+   STATSHUNTERS_API_KEY=abc123def
    
    # Required: OpenRouteService API key
    ORS_API_KEY=your_ors_api_key
