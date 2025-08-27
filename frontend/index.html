@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statshunters Route Optimizer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>🚴 Statshunters Route Optimizer</h1>
+            <p>Plan cycling routes to discover new tiles efficiently</p>
+        </header>
+
+        <!-- Configuration Panel -->
+        <div class="panel" id="config-panel">
+            <h2>Route Configuration</h2>
+            
+            <!-- Statshunters Setup -->
+            <div class="section">
+                <h3>📊 Statshunters Account</h3>
+                <div class="form-group">
+                    <label for="share-link">Share Link:</label>
+                    <input type="url" id="share-link" placeholder="https://www.statshunters.com/share/abc123">
+                    <small>Get this from your Statshunters profile settings</small>
+                </div>
+                <div class="form-group">
+                    <label for="api-key">Or API Key:</label>
+                    <input type="text" id="api-key" placeholder="Your API key">
+                </div>
+            </div>
+
+            <!-- Route Planning -->
+            <div class="section">
+                <h3>🗺️ Route Planning</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="start-lat">Start Latitude:</label>
+                        <input type="number" id="start-lat" step="0.000001" placeholder="52.520008">
+                    </div>
+                    <div class="form-group">
+                        <label for="start-lon">Start Longitude:</label>
+                        <input type="number" id="start-lon" step="0.000001" placeholder="13.404954">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="distance">Target Distance (km):</label>
+                        <input type="number" id="distance" min="1" max="200" value="50">
+                    </div>
+                    <div class="form-group">
+                        <label for="bike-type">Bike Type:</label>
+                        <select id="bike-type">
+                            <option value="road">🚴‍♂️ Road Bike</option>
+                            <option value="gravel" selected>🚵‍♀️ Gravel Bike</option>
+                            <option value="mountain">🏔️ Mountain Bike</option>
+                            <option value="ebike">⚡ E-Bike</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="max-tiles">Max Tiles:</label>
+                        <input type="number" id="max-tiles" min="5" max="50" value="20">
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="prefer-unvisited" checked>
+                            Prefer unvisited tiles
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- OpenRouteService Setup -->
+            <div class="section">
+                <h3>🛣️ Routing Service</h3>
+                <div class="form-group">
+                    <label for="ors-key">OpenRouteService API Key:</label>
+                    <input type="text" id="ors-key" placeholder="Get from openrouteservice.org">
+                    <small>Required for route generation</small>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="actions">
+                <button id="load-tiles-btn" class="btn btn-secondary">🗺️ Load Tiles</button>
+                <button id="generate-route-btn" class="btn btn-primary">🚴 Generate Route</button>
+                <button id="use-current-location-btn" class="btn btn-secondary">📍 Use Current Location</button>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div id="map-container">
+            <div id="map"></div>
+            <div id="map-controls">
+                <button id="toggle-tiles-btn" class="map-btn">👁️ Toggle Tiles</button>
+                <button id="clear-route-btn" class="map-btn">🗑️ Clear Route</button>
+            </div>
+        </div>
+
+        <!-- Results Panel -->
+        <div class="panel" id="results-panel" style="display: none;">
+            <h2>🎯 Route Results</h2>
+            <div id="route-stats" class="stats-grid">
+                <!-- Stats will be populated by JavaScript -->
+            </div>
+            <div class="actions">
+                <button id="download-gpx-btn" class="btn btn-success">📥 Download GPX</button>
+                <button id="export-tiles-btn" class="btn btn-secondary">📊 Export Tile Data</button>
+            </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="status" class="status"></div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading" class="loading" style="display: none;">
+        <div class="spinner"></div>
+        <p>Processing...</p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
