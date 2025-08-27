@@ -43,33 +43,94 @@ class StatshuntersClient:
         visited_tiles = set()
         
         if self.share_code:
-            # Use share API endpoint
-            url = f"https://www.statshunters.com/share/{self.share_code}/api/activities"
+            # Use share API endpoint with pagination
+            base_url = f"https://www.statshunters.com/share/{self.share_code}/api/activities"
+            page = 1
             
             try:
-                response = requests.get(url, timeout=30)
-                response.raise_for_status()
-                data = response.json()
+                while True:
+                    url = f"{base_url}?page={page}" if page > 1 else base_url
+                    response = requests.get(url, timeout=30)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    activities = data.get('activities', [])
+                    if not activities:  # No more pages
+                        break
+                    
+                    # Extract tiles from activities
+                    for activity in activities:
+                        if 'tiles' in activity:
+                            for tile in activity['tiles']:
+                                if isinstance(tile, list) and len(tile) >= 2:
+                                    visited_tiles.add((tile[0], tile[1]))
+                                elif isinstance(tile, dict) and 'x' in tile and 'y' in tile:
+                                    visited_tiles.add((tile['x'], tile['y']))
+                    
+                    page += 1
+                    # Safety limit to prevent infinite loops
+                    if page > 100:
+                        logger.warning("Reached pagination limit of 100 pages")
+                        break
                 
-                # Extract tiles from activities
-                for activity in data.get('activities', []):
-                    if 'tiles' in activity:
-                        for tile in activity['tiles']:
-                            # Assuming tiles are provided as [x, y] or {x: , y:}
-                            if isinstance(tile, list):
-                                visited_tiles.add((tile[0], tile[1]))
-                            elif isinstance(tile, dict):
-                                visited_tiles.add((tile['x'], tile['y']))
-                
-                logger.info(f"Fetched {len(visited_tiles)} visited tiles")
+                logger.info(f"Fetched {len(visited_tiles)} visited tiles from {page-1} pages")
                 
             except requests.RequestException as e:
                 logger.error(f"Error fetching tiles: {e}")
                 raise
         
         elif self.api_key:
-            # TODO: Implement direct API key authentication when documented
-            raise NotImplementedError("Direct API key authentication not yet implemented")
+            # Try using API key as if it's a share code
+            # Some users might paste just the share code instead of full URL
+            logger.info("Trying to use provided API key as share code")
+            
+            # If API key looks like a share code, use it directly
+            if len(self.api_key) > 10 and self.api_key.isalnum():
+                base_url = f"https://www.statshunters.com/share/{self.api_key}/api/activities"
+                page = 1
+                
+                try:
+                    while True:
+                        url = f"{base_url}?page={page}" if page > 1 else base_url
+                        response = requests.get(url, timeout=30)
+                        response.raise_for_status()
+                        data = response.json()
+                        
+                        activities = data.get('activities', [])
+                        if not activities:  # No more pages
+                            break
+                        
+                        # Extract tiles from activities
+                        for activity in activities:
+                            if 'tiles' in activity:
+                                for tile in activity['tiles']:
+                                    if isinstance(tile, list) and len(tile) >= 2:
+                                        visited_tiles.add((tile[0], tile[1]))
+                                    elif isinstance(tile, dict) and 'x' in tile and 'y' in tile:
+                                        visited_tiles.add((tile['x'], tile['y']))
+                        
+                        page += 1
+                        # Safety limit to prevent infinite loops
+                        if page > 100:
+                            logger.warning("Reached pagination limit of 100 pages")
+                            break
+                    
+                    logger.info(f"Fetched {len(visited_tiles)} visited tiles using API key as share code from {page-1} pages")
+                    
+                except requests.RequestException as e:
+                    logger.error(f"Error using API key as share code: {e}")
+                    raise ValueError(
+                        "Could not access data with provided API key. "
+                        "Please ensure you're using a valid Statshunters share link "
+                        "(format: https://www.statshunters.com/share/abc123) "
+                        "or the share code portion (abc123). "
+                        "Get your share link from your Statshunters profile settings."
+                    )
+            else:
+                raise ValueError(
+                    "Invalid API key format. Statshunters primarily uses share links for API access. "
+                    "Please use a share link from your profile: https://www.statshunters.com/share/YOUR_CODE"
+                )
         
         return visited_tiles
     
