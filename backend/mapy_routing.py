@@ -2,6 +2,7 @@ import requests
 from typing import List, Tuple, Dict, Optional
 import logging
 import json
+from mapy_waypoint_reducer import MapyWaypointReducer
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class MapyRouteService:
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json'
         })
+        self.waypoint_reducer = MapyWaypointReducer()
     
     def get_route_preferences(self, bike_type: str) -> Dict:
         """
@@ -76,10 +78,7 @@ class MapyRouteService:
         if not waypoints:
             return waypoints
             
-        # Limit waypoints to reduce API usage (Mapy.cz allows up to 15)
-        if len(waypoints) > 15:
-            logger.info(f"Limiting waypoints from {len(waypoints)} to 15 (Mapy.cz limit)")
-            waypoints = waypoints[:15]
+        # Note: Waypoint limiting is now handled in generate_route with intelligent reduction
         
         # For Mapy.cz, we'll use a simple validation approach without expensive API calls
         # Similar to our OpenRouteService optimization
@@ -139,6 +138,64 @@ class MapyRouteService:
         
         return None
 
+    def _haversine_distance(self, point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
+        """
+        Calculate the great circle distance between two points on Earth.
+        
+        Args:
+            point1: (lon, lat) of first point
+            point2: (lon, lat) of second point
+            
+        Returns:
+            Distance in kilometers
+        """
+        import math
+        
+        lon1, lat1 = point1
+        lon2, lat2 = point2
+        
+        # Convert to radians
+        lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+        
+        # Haversine formula
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+        c = 2 * math.asin(math.sqrt(a))
+        
+        # Earth's radius in kilometers
+        r = 6371
+        
+        return c * r
+
+    def _create_fallback_waypoints(self, waypoints: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+        """
+        Create a minimal set of fallback waypoints when API requests fail.
+        
+        Args:
+            waypoints: Original waypoints
+            
+        Returns:
+            Minimal fallback waypoint set (typically start + 1-2 intermediate + end)
+        """
+        if len(waypoints) <= 3:
+            return waypoints
+        
+        # Always keep start and end
+        start = waypoints[0]
+        end = waypoints[-1]
+        
+        # For fallback, keep only 1-2 intermediate waypoints
+        if len(waypoints) <= 6:
+            # Keep middle waypoint
+            mid_idx = len(waypoints) // 2
+            return [start, waypoints[mid_idx], end]
+        else:
+            # Keep two intermediate waypoints (1/3 and 2/3 along the route)
+            third1_idx = len(waypoints) // 3
+            third2_idx = (2 * len(waypoints)) // 3
+            return [start, waypoints[third1_idx], waypoints[third2_idx], end]
+
     def generate_route(self, 
                       waypoints: List[Tuple[float, float]], 
                       bike_type: str = 'mountain',
@@ -164,9 +221,25 @@ class MapyRouteService:
         if len(waypoints) < 2:
             raise ValueError("At least 2 waypoints required")
         
+        # Use intelligent waypoint reduction instead of simple truncation
         if len(waypoints) > 15:
-            logger.warning(f"Too many waypoints ({len(waypoints)}). Using first 15 (Mapy.cz limit).")
-            waypoints = waypoints[:15]
+            logger.info(f"Optimizing {len(waypoints)} waypoints for Mapy.cz (limit: 15)")
+            original_count = len(waypoints)
+            
+            # Calculate approximate route distance for strategy selection
+            total_distance = 0
+            for i in range(len(waypoints) - 1):
+                total_distance += self._haversine_distance(waypoints[i], waypoints[i + 1])
+            
+            waypoints = self.waypoint_reducer.reduce_waypoints(waypoints, total_distance)
+            
+            # Log quality metrics
+            quality = self.waypoint_reducer.estimate_route_quality(
+                waypoints if original_count <= 15 else waypoints + [(0, 0)] * (original_count - len(waypoints)),
+                waypoints
+            )
+            logger.info(f"Waypoint optimization: {original_count} → {len(waypoints)} "
+                       f"(distance ratio: {quality['distance_ratio']:.2f})")
         
         # Validate waypoints if requested
         if validate_waypoints:
@@ -242,6 +315,22 @@ class MapyRouteService:
             elif e.response.status_code == 401:
                 raise ValueError("Invalid Mapy.cz API key. Please check your API key configuration.")
             elif e.response.status_code == 400:
+                # Try fallback with even fewer waypoints if original request failed
+                if len(waypoints) > 3:
+                    logger.warning("API request failed, trying with fewer waypoints")
+                    try:
+                        # Use only start, end, and 1-2 key intermediate points
+                        fallback_waypoints = self._create_fallback_waypoints(waypoints)
+                        logger.info(f"Retrying with {len(fallback_waypoints)} fallback waypoints")
+                        
+                        # Recursively call with reduced waypoints
+                        return self.generate_route(
+                            fallback_waypoints, bike_type, optimize=False, 
+                            return_geometry=return_geometry, validate_waypoints=False
+                        )
+                    except Exception as fallback_error:
+                        logger.error(f"Fallback routing also failed: {fallback_error}")
+                
                 raise ValueError("Invalid request parameters for Mapy.cz. Try different coordinates or reduce waypoints.")
             else:
                 raise ValueError(f"Mapy.cz API error: {error_msg}")
