@@ -37,10 +37,7 @@ class MapyRouteService:
         self.api_key = api_key
         self.base_url = "https://api.mapy.com/v1"
         self.session = requests.Session()
-        self.session.headers.update({
-            'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json'
-        })
+        # Note: Mapy.cz API uses apikey as URL parameter, not header authentication
         self.waypoint_reducer = MapyWaypointReducer()
     
     def get_route_preferences(self, bike_type: str) -> Dict:
@@ -264,18 +261,19 @@ class MapyRouteService:
             end_coord = waypoints[-1]
             intermediate_waypoints = waypoints[1:-1] if len(waypoints) > 2 else []
             
-            # Build API request
+            # Build API request - include API key as parameter
             params = {
                 'start': f"{start_coord[0]},{start_coord[1]}",
                 'end': f"{end_coord[0]},{end_coord[1]}",
                 'routeType': profile,
-                'lang': 'en'
+                'lang': 'en',
+                'apikey': self.api_key  # Mapy.cz uses apikey parameter for authentication
             }
             
             # Add intermediate waypoints if any
             if intermediate_waypoints:
                 waypoint_strings = [f"{wp[0]},{wp[1]}" for wp in intermediate_waypoints]
-                params['waypoints'] = '|'.join(waypoint_strings)
+                params['waypoints'] = ';'.join(waypoint_strings)  # Use semicolon as per API docs
             
             # Request route from Mapy.cz
             url = f"{self.base_url}/routing/route"
