@@ -79,6 +79,34 @@
                 </div>
             </div>
 
+            <!-- Tile Display Options -->
+            <div class="section">
+                <h3>🗺️ Tile Display</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="auto-load-tiles" checked>
+                        Auto-load tiles for current map view
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="tile-opacity">Tile Transparency:</label>
+                    <input type="range" id="tile-opacity" min="0.1" max="1.0" step="0.1" value="0.4">
+                    <span id="opacity-value">40%</span>
+                </div>
+                <div class="form-group tile-options">
+                    <label>Display Options:</label>
+                    <div class="checkbox-grid">
+                        <label><input type="checkbox" id="show-tiles" checked> Show tiles</label>
+                        <label><input type="checkbox" id="show-squares"> Show squares</label>
+                        <label><input type="checkbox" id="show-max-cluster"> Show max cluster</label>
+                        <label><input type="checkbox" id="show-cluster"> Show clusters</label>
+                        <label><input type="checkbox" id="show-routes"> Show routes</label>
+                        <label><input type="checkbox" id="show-new-route"> Show new route</label>
+                        <label><input type="checkbox" id="show-grid"> Show grid</label>
+                    </div>
+                </div>
+            </div>
+
             <!-- OpenRouteService Setup -->
             <div class="section">
                 <h3>🛣️ Routing Service</h3>
@@ -91,7 +119,7 @@
 
             <!-- Action Buttons -->
             <div class="actions">
-                <button id="load-tiles-btn" class="btn btn-secondary">🗺️ Load Tiles</button>
+                <button id="load-tiles-btn" class="btn btn-secondary">🗺️ Reload Tiles</button>
                 <button id="generate-route-btn" class="btn btn-primary">🚴 Generate Route</button>
                 <button id="use-current-location-btn" class="btn btn-secondary">📍 Use Current Location</button>
             </div>
