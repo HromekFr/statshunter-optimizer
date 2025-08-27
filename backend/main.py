@@ -183,11 +183,46 @@ async def generate_route(request: RouteRequest):
         )
         
         # Generate route through waypoints
-        route_data = route_service.generate_route(
-            waypoints=waypoints,
-            bike_type=request.bike_type,
-            optimize=True
-        )
+        try:
+            route_data = route_service.generate_route(
+                waypoints=waypoints,
+                bike_type=request.bike_type,
+                optimize=True,
+                validate_waypoints=True
+            )
+        except Exception as route_error:
+            # If routing fails, try with fewer waypoints or different strategy
+            logger.warning(f"Initial routing failed: {route_error}")
+            
+            if len(waypoints) > 2:
+                # Try with just start and end points
+                logger.info("Retrying with simplified route (start and end only)")
+                simplified_waypoints = [waypoints[0], waypoints[-1]]
+                
+                try:
+                    route_data = route_service.generate_route(
+                        waypoints=simplified_waypoints,
+                        bike_type=request.bike_type,
+                        optimize=False,
+                        validate_waypoints=True
+                    )
+                    logger.info("Simplified route generated successfully")
+                except Exception as simple_error:
+                    logger.error(f"Simplified routing also failed: {simple_error}")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Could not generate route in this area. The selected coordinates may be in "
+                               f"areas without suitable roads for {request.bike_type} cycling. "
+                               f"Try selecting a different start point or reducing the distance. "
+                               f"Error details: {str(simple_error)}"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Could not generate route between the selected points. "
+                           f"The coordinates may be in areas without suitable roads for {request.bike_type} cycling. "
+                           f"Try selecting a different start point. Error details: {str(route_error)}"
+                )
         
         # Calculate tiles covered by route
         # This is simplified - you'd want to check actual route geometry

@@ -24,11 +24,111 @@ class RouteService:
         """
         self.client = openrouteservice.Client(key=api_key)
     
+    def validate_and_snap_waypoints(self, waypoints: List[Tuple[float, float]], bike_type: str = 'gravel') -> List[Tuple[float, float]]:
+        """
+        Validate waypoints and snap them to nearest routable points.
+        
+        Args:
+            waypoints: List of (lon, lat) coordinates
+            bike_type: Type of bike for routing profile
+            
+        Returns:
+            List of validated and snapped waypoints
+        """
+        if not waypoints:
+            return waypoints
+            
+        profile = self.PROFILES.get(bike_type, 'cycling-regular')
+        validated_waypoints = []
+        
+        for i, (lon, lat) in enumerate(waypoints):
+            try:
+                # Try to find a routable point near this coordinate using isochrones
+                # This is a lightweight way to test if a point is routable
+                test_result = self.client.isochrones(
+                    locations=[[lon, lat]],
+                    profile=profile,
+                    range=[500],  # 500 meter range
+                    range_type='distance'
+                )
+                
+                # If isochrones works, the point is routable
+                validated_waypoints.append((lon, lat))
+                logger.info(f"Waypoint {i} at ({lon:.6f}, {lat:.6f}) is routable")
+                
+            except Exception as e:
+                logger.warning(f"Waypoint {i} at ({lon:.6f}, {lat:.6f}) is not routable: {e}")
+                
+                # Try to find a nearby routable point by searching in expanding circles
+                snapped_point = self._find_nearest_routable_point(lon, lat, profile)
+                if snapped_point:
+                    validated_waypoints.append(snapped_point)
+                    logger.info(f"Snapped waypoint {i} to ({snapped_point[0]:.6f}, {snapped_point[1]:.6f})")
+                else:
+                    logger.warning(f"Could not find routable alternative for waypoint {i}, skipping")
+        
+        return validated_waypoints
+    
+    def _find_nearest_routable_point(self, lon: float, lat: float, profile: str, max_radius: float = 2000) -> Optional[Tuple[float, float]]:
+        """
+        Find the nearest routable point within max_radius meters.
+        
+        Args:
+            lon: Longitude of original point
+            lat: Latitude of original point  
+            profile: Routing profile to use
+            max_radius: Maximum search radius in meters
+            
+        Returns:
+            (lon, lat) of nearest routable point or None if not found
+        """
+        import math
+        
+        # Convert meters to approximate degrees (rough approximation)
+        lat_deg_per_meter = 1 / 111000
+        lon_deg_per_meter = 1 / (111000 * math.cos(math.radians(lat)))
+        
+        # Try points in expanding squares around the original point
+        for radius_m in [200, 500, 1000, 2000]:
+            if radius_m > max_radius:
+                break
+                
+            lat_offset = radius_m * lat_deg_per_meter
+            lon_offset = radius_m * lon_deg_per_meter
+            
+            # Test points in cardinal directions
+            test_points = [
+                (lon, lat + lat_offset),      # North
+                (lon, lat - lat_offset),      # South
+                (lon + lon_offset, lat),      # East
+                (lon - lon_offset, lat),      # West
+                (lon + lon_offset/2, lat + lat_offset/2),  # Northeast
+                (lon - lon_offset/2, lat + lat_offset/2),  # Northwest  
+                (lon + lon_offset/2, lat - lat_offset/2),  # Southeast
+                (lon - lon_offset/2, lat - lat_offset/2),  # Southwest
+            ]
+            
+            for test_lon, test_lat in test_points:
+                try:
+                    # Test if this point is routable
+                    self.client.isochrones(
+                        locations=[[test_lon, test_lat]],
+                        profile=profile,
+                        range=[100],
+                        range_type='distance'
+                    )
+                    return (test_lon, test_lat)
+                except:
+                    continue
+        
+        return None
+
     def generate_route(self, 
                       waypoints: List[Tuple[float, float]], 
                       bike_type: str = 'gravel',
                       optimize: bool = True,
-                      return_geometry: bool = True) -> Dict:
+                      return_geometry: bool = True,
+                      validate_waypoints: bool = True) -> Dict:
         """
         Generate a cycling route through waypoints.
         
@@ -37,6 +137,7 @@ class RouteService:
             bike_type: Type of bike ('road', 'gravel', 'mountain', 'ebike')
             optimize: Whether to optimize waypoint order
             return_geometry: Whether to return route geometry
+            validate_waypoints: Whether to validate and snap waypoints to roads
             
         Returns:
             Route data including geometry, distance, and duration
@@ -50,6 +151,22 @@ class RouteService:
         if len(waypoints) > 50:
             logger.warning(f"Too many waypoints ({len(waypoints)}). Using first 50.")
             waypoints = waypoints[:50]
+        
+        # Validate and snap waypoints to routable points
+        if validate_waypoints:
+            logger.info("Validating and snapping waypoints to roads...")
+            original_count = len(waypoints)
+            waypoints = self.validate_and_snap_waypoints(waypoints, bike_type)
+            
+            if len(waypoints) < 2:
+                raise ValueError(
+                    f"After validation, only {len(waypoints)} routable waypoints remain. "
+                    f"Need at least 2. Try choosing a different area with more roads, "
+                    f"or reduce the target distance."
+                )
+            
+            if len(waypoints) < original_count:
+                logger.warning(f"Reduced waypoints from {original_count} to {len(waypoints)} after validation")
         
         profile = self.PROFILES[bike_type]
         
