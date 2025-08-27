@@ -401,23 +401,53 @@ async def download_gpx(filename: str):
 @app.get("/api/bike-profiles")
 async def get_bike_profiles():
     """Get information about available bike profiles and their routing preferences."""
-    if not route_service:
-        raise HTTPException(status_code=400, detail="Routing service not available")
+    if not routing_factory:
+        raise HTTPException(status_code=503, detail="Routing services not available")
     
-    profiles = {}
-    for bike_type in route_service.PROFILES.keys():
-        profiles[bike_type] = route_service.get_route_preferences(bike_type)
+    available_services = routing_factory.get_available_services()
+    if not available_services:
+        raise HTTPException(status_code=400, detail="No routing services configured")
     
-    return {"profiles": profiles}
+    # Return bike profiles organized by service
+    service_profiles = {}
+    for service_info in available_services:
+        service_id = service_info['id']
+        try:
+            # Create service instance to get profiles
+            routing_service = routing_factory.create_service(service_type=service_id)
+            
+            # Get profiles for this service
+            profiles = {}
+            service_bike_types = service_info.get('bike_types', {})
+            for bike_type in service_bike_types.keys():
+                try:
+                    profiles[bike_type] = routing_service.get_route_preferences(bike_type)
+                except Exception as e:
+                    # Skip bike types that don't work with this service
+                    logger.warning(f"Could not get preferences for {bike_type} on {service_id}: {e}")
+                    continue
+            
+            service_profiles[service_id] = {
+                'service_name': service_info['name'],
+                'profiles': profiles
+            }
+            
+        except Exception as e:
+            logger.warning(f"Could not load profiles for service {service_id}: {e}")
+            continue
+    
+    return {"service_profiles": service_profiles}
 
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
+    available_services = routing_factory.get_available_services() if routing_factory else []
     return {
         "status": "healthy",
         "services": {
             "statshunters": statshunters_client is not None,
-            "routing": route_service is not None
+            "routing_factory": routing_factory is not None,
+            "available_routing_services": [s['id'] for s in available_services]
         }
     }
 
