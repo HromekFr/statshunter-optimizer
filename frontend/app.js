@@ -439,10 +439,7 @@ function getCurrentLocation() {
 
 // Load tiles from Statshunters (manual reload)
 async function loadTiles() {
-    const shareLink = document.getElementById('share-link').value;
-    const apiKey = document.getElementById('api-key').value;
-    
-    // Note: Allow empty credentials - backend will use .env file if configured
+    // Note: Credentials will be read from .env file on backend
     
     // Flag as manual interaction to prevent auto-loading conflicts
     isManualInteraction = true;
@@ -455,8 +452,7 @@ async function loadTiles() {
         north: bounds.getNorth()
     };
     
-    if (shareLink) requestData.share_link = shareLink;
-    if (apiKey) requestData.api_key = apiKey;
+    // Backend will use .env credentials automatically
     
     try {
         showLoadingSpinner(true);
@@ -477,6 +473,19 @@ async function loadTiles() {
         currentTileData = data;
         
         displayTiles(data);
+        
+        // Ensure route layer persists after tile reload
+        if (routeLayer) {
+            // Re-add route layer to ensure it stays visible
+            if (!map.hasLayer(routeLayer)) {
+                routeLayer.addTo(map);
+            }
+            // Bring route to front so it appears above tiles
+            if (typeof routeLayer.bringToFront === 'function') {
+                routeLayer.bringToFront();
+            }
+        }
+        
         showStatus(`Loaded ${data.stats.total_tiles} tiles (${data.stats.unvisited_tiles} unvisited)`, 'success');
         
     } catch (error) {
@@ -542,8 +551,6 @@ async function generateRoute() {
     const bikeType = document.getElementById('bike-type').value;
     const maxTiles = parseInt(document.getElementById('max-tiles').value);
     const preferUnvisited = document.getElementById('prefer-unvisited').checked;
-    const shareLink = document.getElementById('share-link').value;
-    const apiKey = document.getElementById('api-key').value;
     const routingService = document.getElementById('routing-service').value;
     
     // Validation
@@ -557,7 +564,7 @@ async function generateRoute() {
         return;
     }
     
-    // Note: Allow empty credentials - backend will use .env file if configured
+    // Note: Credentials will be read from .env file on backend
     
     const requestData = {
         start_lat: startLat,
@@ -568,9 +575,7 @@ async function generateRoute() {
         prefer_unvisited: preferUnvisited
     };
     
-    // Add Statshunters credentials
-    if (shareLink) requestData.share_link = shareLink;
-    if (apiKey) requestData.api_key = apiKey;
+    // Backend will use .env credentials automatically
     
     // Add routing service preference
     if (routingService && routingService !== '') requestData.routing_service = routingService;
@@ -789,10 +794,7 @@ function showStatus(message, type = 'info') {
 
 // Auto-load tiles for current map view
 async function autoLoadTilesForView(showLoading = false) {
-    const shareLink = document.getElementById('share-link').value;
-    const apiKey = document.getElementById('api-key').value;
-    
-    // Allow empty credentials - backend will use .env file if configured
+    // Note: Credentials will be read from .env file on backend
     
     const bounds = map.getBounds();
     const requestData = {
@@ -802,8 +804,7 @@ async function autoLoadTilesForView(showLoading = false) {
         north: bounds.getNorth()
     };
     
-    if (shareLink) requestData.share_link = shareLink;
-    if (apiKey) requestData.api_key = apiKey;
+    // Backend will use .env credentials automatically
     
     try {
         if (showLoading) {
@@ -822,6 +823,19 @@ async function autoLoadTilesForView(showLoading = false) {
             const data = await response.json();
             currentTileData = data;
             displayTiles(data);
+            
+            // Ensure route layer persists after tile reload
+            if (routeLayer) {
+                // Re-add route layer to ensure it stays visible
+                if (!map.hasLayer(routeLayer)) {
+                    routeLayer.addTo(map);
+                }
+                // Bring route to front so it appears above tiles
+                if (typeof routeLayer.bringToFront === 'function') {
+                    routeLayer.bringToFront();
+                }
+            }
+            
             console.log(`Auto-loaded ${data.stats.total_tiles} tiles`);
         }
     } catch (error) {
