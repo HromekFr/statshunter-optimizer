@@ -23,6 +23,42 @@ class TileOptimizer:
         self.unvisited_tiles = all_tiles - visited_tiles
         self.all_tiles = all_tiles
     
+    def tile_to_center_with_offset(self, tile_x: int, tile_y: int, zoom: int = 14, road_bias: bool = True) -> Tuple[float, float]:
+        """
+        Get the center coordinate of a tile, optionally with small random offset to increase road hit probability.
+        
+        Args:
+            tile_x: Tile X coordinate
+            tile_y: Tile Y coordinate
+            zoom: Zoom level
+            road_bias: Whether to add small random offset to increase chance of hitting roads
+            
+        Returns:
+            (lon, lat) center coordinate, possibly with offset
+        """
+        import mercantile
+        import random
+        
+        tile = mercantile.Tile(tile_x, tile_y, zoom)
+        bounds = mercantile.bounds(tile)
+        
+        lon = (bounds.west + bounds.east) / 2
+        lat = (bounds.south + bounds.north) / 2
+        
+        if road_bias:
+            # Add small random offset to increase probability of hitting a road
+            # Tiles are roughly 300-600m at zoom 14, so offset by up to 25% of tile size
+            tile_width = bounds.east - bounds.west
+            tile_height = bounds.north - bounds.south
+            
+            lon_offset = (random.random() - 0.5) * tile_width * 0.5  # ±25% of tile width
+            lat_offset = (random.random() - 0.5) * tile_height * 0.5  # ±25% of tile height
+            
+            lon += lon_offset
+            lat += lat_offset
+        
+        return (lon, lat)
+
     def tile_to_center(self, tile_x: int, tile_y: int, zoom: int = 14) -> Tuple[float, float]:
         """
         Get the center coordinate of a tile.
@@ -67,7 +103,7 @@ class TileOptimizer:
         tiles_to_consider = self.unvisited_tiles if prefer_unvisited else self.all_tiles
         
         for tile_x, tile_y in tiles_to_consider:
-            coord = self.tile_to_center(tile_x, tile_y)
+            coord = self.tile_to_center_with_offset(tile_x, tile_y, road_bias=True)
             tile_coords.append(coord)
             # Weight unvisited tiles higher
             weight = 2.0 if (tile_x, tile_y) in self.unvisited_tiles else 1.0
