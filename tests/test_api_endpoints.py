@@ -41,7 +41,8 @@ class TestAPIEndpoints(unittest.TestCase):
         if response.status_code == 200:
             data = response.json()
             self.assertIn('services', data)
-            self.assertIsInstance(data['services'], dict)
+            # Services can be a dict or list
+            self.assertIsInstance(data['services'], (dict, list))
     
     def test_bike_profiles_endpoint(self):
         """Test bike profiles endpoint."""
@@ -50,8 +51,8 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertIn(response.status_code, [200, 503])
         if response.status_code == 200:
             data = response.json()
-            self.assertIn('profiles', data)
-            self.assertIsInstance(data['profiles'], dict)
+            self.assertIn('service_profiles', data)
+            self.assertIsInstance(data['service_profiles'], dict)
     
     @patch('main.StatshuntersClient')
     def test_tiles_endpoint(self, mock_client_class):

@@ -28,7 +28,7 @@ class TestRoutingFactory(unittest.TestCase):
         factory = RoutingServiceFactory()
         self.assertIsNotNone(factory)
         services = factory.get_available_services()
-        self.assertIsInstance(services, dict)
+        self.assertIsInstance(services, list)
     
     def test_service_detection(self):
         """Test service availability detection."""
@@ -39,11 +39,14 @@ class TestRoutingFactory(unittest.TestCase):
     
     def test_bike_type_validation(self):
         """Test bike type validation for services."""
-        if 'openroute' in self.factory.get_available_services():
+        services = self.factory.get_available_services()
+        service_ids = [s['id'] for s in services]
+        
+        if 'openroute' in service_ids:
             self.assertTrue(self.factory.validate_service_bike_combination('openroute', 'road'))
             self.assertTrue(self.factory.validate_service_bike_combination('openroute', 'mountain'))
         
-        if 'mapy' in self.factory.get_available_services():
+        if 'mapy' in service_ids:
             self.assertTrue(self.factory.validate_service_bike_combination('mapy', 'road'))
             self.assertTrue(self.factory.validate_service_bike_combination('mapy', 'mountain'))
             self.assertFalse(self.factory.validate_service_bike_combination('mapy', 'gravel'))
@@ -198,8 +201,9 @@ class TestIntegration(unittest.TestCase):
         
         # Should have both services available with mock keys
         services = factory.get_available_services()
-        self.assertIn('openroute', services)
-        self.assertIn('mapy', services)
+        service_ids = [s['id'] for s in services]
+        self.assertIn('openroute', service_ids)
+        self.assertIn('mapy', service_ids)
     
     def test_waypoint_optimization_flow(self):
         """Test the complete waypoint optimization flow."""
