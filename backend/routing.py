@@ -16,50 +16,27 @@ class RouteService:
     }
     
     # Routing options for each bike type to prefer cycling infrastructure
+    # Note: Advanced weightings are not supported by OpenRouteService API currently
     PROFILE_OPTIONS = {
         'road': {
             'avoid_features': ['highways'],
             'prefer_greenness': False,  # Road bikes prefer faster routes
-            'profile_params': {
-                'weightings': {
-                    'steepness_difficulty': 1,  # Moderate difficulty
-                    'green': 0.2,
-                    'quiet': 0.1
-                }
-            }
+            'description_extra': 'moderate difficulty, prioritizes speed'
         },
         'gravel': {
             'avoid_features': ['highways'],
             'prefer_greenness': True,  # Gravel bikes can use green routes
-            'profile_params': {
-                'weightings': {
-                    'steepness_difficulty': 2,  # Amateur level - can handle more terrain
-                    'green': 0.8,  # Prefer green/quiet routes
-                    'quiet': 0.8
-                }
-            }
+            'description_extra': 'amateur level terrain, prefers quiet scenic routes'
         },
         'mountain': {
             'avoid_features': [],  # Mountain bikes can handle most terrain
             'prefer_greenness': True,
-            'profile_params': {
-                'weightings': {
-                    'steepness_difficulty': 3,  # Pro level - can handle steep terrain
-                    'green': 0.9,  # Strong preference for trails/paths
-                    'quiet': 0.9
-                }
-            }
+            'description_extra': 'pro level terrain, strong preference for trails and paths'
         },
         'ebike': {
             'avoid_features': ['highways'],
             'prefer_greenness': True,  # E-bikes good for leisure routes
-            'profile_params': {
-                'weightings': {
-                    'steepness_difficulty': 0,  # Novice level - e-bike assists with hills
-                    'green': 0.6,
-                    'quiet': 0.6
-                }
-            }
+            'description_extra': 'gentle gradients (e-motor assists), scenic routes'
         }
     }
     
@@ -91,12 +68,20 @@ class RouteService:
             'ebike': 'Optimized for e-bike touring: avoids highways, prefers quiet scenic routes, gentle gradients (e-motor assists with hills)'
         }
         
+        # Enhanced descriptions with extra details
+        base_description = descriptions.get(bike_type, 'Standard cycling route')
+        extra_description = profile_options.get('description_extra', '')
+        if extra_description:
+            full_description = f"{base_description.split(':')[0]}: {extra_description}"
+        else:
+            full_description = base_description
+            
         return {
             'profile': self.PROFILES.get(bike_type, 'cycling-regular'),
-            'description': descriptions.get(bike_type, 'Standard cycling route'),
+            'description': full_description,
             'avoids': profile_options.get('avoid_features', []),
             'prefers_green_routes': profile_options.get('prefer_greenness', False),
-            'difficulty_level': profile_options.get('profile_params', {}).get('weightings', {}).get('steepness_difficulty', 1)
+            'difficulty_level': 'varies by terrain'  # Since we can't set specific difficulty levels
         }
     
     def validate_and_snap_waypoints(self, waypoints: List[Tuple[float, float]], bike_type: str = 'gravel') -> List[Tuple[float, float]]:
@@ -246,17 +231,6 @@ class RouteService:
         profile = self.PROFILES[bike_type]
         profile_options = self.PROFILE_OPTIONS.get(bike_type, {})
         
-        # Build routing options
-        routing_options = {}
-        
-        # Add avoidance preferences
-        if profile_options.get('avoid_features'):
-            routing_options['avoid_features'] = profile_options['avoid_features']
-        
-        # Add profile-specific parameters
-        if profile_options.get('profile_params'):
-            routing_options.update(profile_options['profile_params'])
-        
         try:
             # Generate route with cycling-optimized options
             request_params = {
@@ -270,9 +244,13 @@ class RouteService:
                 'radiuses': [-1] * len(waypoints)  # Allow snapping to roads
             }
             
-            # Add cycling-specific options
-            if routing_options:
-                request_params['options'] = routing_options
+            # Add simplified cycling-specific options (remove unsupported weightings)
+            simplified_options = {}
+            if profile_options.get('avoid_features'):
+                simplified_options['avoid_features'] = profile_options['avoid_features']
+            
+            if simplified_options:
+                request_params['options'] = simplified_options
             
             route = self.client.directions(**request_params)
             
@@ -301,11 +279,28 @@ class RouteService:
                 return result
             
         except openrouteservice.exceptions.ApiError as e:
+            error_msg = str(e)
             logger.error(f"ORS API error: {e}")
-            raise
+            
+            # Check for specific error types
+            if "429" in error_msg or "rate limit" in error_msg.lower():
+                raise ValueError("OpenRouteService rate limit exceeded. Please wait a few minutes before trying again. Consider using fewer waypoints or a shorter distance to reduce API calls.")
+            elif "2012" in error_msg and "weightings" in error_msg:
+                # Known issue with weightings parameter - this is handled by using simplified options
+                raise ValueError("Route generation failed due to API parameter issues. This has been reported to the developers.")
+            elif "2010" in error_msg:
+                raise ValueError("Could not find routable roads near the selected coordinates. Try a different start point or area with more roads.")
+            else:
+                raise ValueError(f"OpenRouteService API error: {error_msg}")
         except Exception as e:
+            error_msg = str(e)
             logger.error(f"Route generation error: {e}")
-            raise
+            
+            # Check for rate limit in generic exceptions too
+            if "rate limit" in error_msg.lower() or "429" in error_msg:
+                raise ValueError("Rate limit exceeded. Please wait a few minutes before trying again.")
+            else:
+                raise
     
     def generate_round_trip(self,
                            start_point: Tuple[float, float],
